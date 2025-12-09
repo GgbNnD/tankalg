@@ -128,7 +128,7 @@ while keepgoing:
                 p1.turn_mode = player.Player.LEFT
             elif event.key == pygame.K_f:
                 p1.turn_mode = player.Player.RIGHT
-            elif event.key == pygame.K_e:
+            if event.key == pygame.K_e:
                 p1.move_mode = player.Player.FORWARD
             elif event.key == pygame.K_d:
                 p1.move_mode = player.Player.BACK
@@ -140,7 +140,7 @@ while keepgoing:
                 p2.turn_mode = player.Player.LEFT
             elif event.key == pygame.K_RIGHT:
                 p2.turn_mode = player.Player.RIGHT
-            elif event.key == pygame.K_UP:
+            if event.key == pygame.K_UP:
                 p2.move_mode = player.Player.FORWARD
             elif event.key == pygame.K_DOWN:
                 p2.move_mode = player.Player.BACK
