@@ -152,39 +152,7 @@ class Arena:
         self.draw_info(surface)
         self.supplies.draw(surface)
 
-    def get_ai_keys(self, player, original_keys):
-        # 简单的随机 AI 逻辑
-        new_keys = list(original_keys)
-        
-        # 清除玩家2的手动按键，防止干扰
-        new_keys[pygame.K_i] = 0
-        new_keys[pygame.K_k] = 0
-        new_keys[pygame.K_j] = 0
-        new_keys[pygame.K_l] = 0
-        new_keys[pygame.K_u] = 0
-        
-        if not hasattr(player, 'ai_action_timer'):
-            player.ai_action_timer = 0
-            player.ai_action = 'idle'
-            
-        # 每 200ms 改变一次动作
-        if self.clock - player.ai_action_timer > 200:
-            player.ai_action_timer = self.clock
-            # 动作概率：前进 40%，左转 20%，右转 20%，开火 10%，不动 10%
-            actions = ['forward', 'left', 'right', 'fire', 'idle']
-            weights = [0.4, 0.2, 0.2, 0.1, 0.1]
-            player.ai_action = random.choices(actions, weights=weights)[0]
-            
-        if player.ai_action == 'forward':
-            new_keys[pygame.K_i] = 1
-        elif player.ai_action == 'left':
-            new_keys[pygame.K_j] = 1
-        elif player.ai_action == 'right':
-            new_keys[pygame.K_l] = 1
-        elif player.ai_action == 'fire':
-            new_keys[pygame.K_u] = 1
-            
-        return new_keys
+
 
     def update(self, surface, keys):
         self.clock = pygame.time.get_ticks()
@@ -193,12 +161,7 @@ class Arena:
 
         if not self.pause and not self.celebrating:
             for aplayer in self.players:
-                if aplayer.name == 2:
-                    # 玩家2 使用 AI 控制
-                    ai_keys = self.get_ai_keys(aplayer, keys)
-                    aplayer.update(ai_keys)
-                else:
-                    aplayer.update(keys)
+                aplayer.update(keys)
 
             self.update_supply()
 
