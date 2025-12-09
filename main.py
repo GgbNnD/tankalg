@@ -123,7 +123,8 @@ while keepgoing:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
                 pause = not pause
-            elif event.key == pygame.K_s:
+            
+            if event.key == pygame.K_s:
                 p1.turn_mode = player.Player.LEFT
             elif event.key == pygame.K_f:
                 p1.turn_mode = player.Player.RIGHT
@@ -131,10 +132,11 @@ while keepgoing:
                 p1.move_mode = player.Player.FORWARD
             elif event.key == pygame.K_d:
                 p1.move_mode = player.Player.BACK
-            elif event.key == pygame.K_q:
+            if event.key == pygame.K_q:
                 if newb := p1.add_bullet():
                     effect_bullets.append(newb)
-            elif event.key == pygame.K_LEFT:
+                    
+            if event.key == pygame.K_LEFT:
                 p2.turn_mode = player.Player.LEFT
             elif event.key == pygame.K_RIGHT:
                 p2.turn_mode = player.Player.RIGHT
@@ -142,7 +144,7 @@ while keepgoing:
                 p2.move_mode = player.Player.FORWARD
             elif event.key == pygame.K_DOWN:
                 p2.move_mode = player.Player.BACK
-            elif event.key == pygame.K_m:
+            if event.key == pygame.K_m:
                 if newb := p2.add_bullet():
                     effect_bullets.append(newb)
         elif event.type == pygame.KEYUP:
