@@ -707,10 +707,20 @@ class GATrainingEnvironment:
         for c in controllers:
             c.reset()
         
+        # --- 固定训练环境 ---
+        # 保存当前的随机状态
+        rng_state = random.getstate()
+        # 设置固定种子，确保每次生成的迷宫和出生点一致
+        random.seed(100) 
+        
         # 创建游戏状态
         arena = arena_module.Arena()
         # 设置3个玩家
         arena.setup(3, (0, 0, 0))
+        
+        # 恢复随机状态，以免影响后续的随机过程（如粒子效果、GA变异等）
+        random.setstate(rng_state)
+        # ------------------
         
         start_time = pygame.time.get_ticks()
         game_start_clock = arena.clock
