@@ -17,121 +17,118 @@ import math
 import random
 import pickle
 import os
+import time
+import logging
+import argparse
 from collections import defaultdict
+
 from source import tools, setup, constants as C
 from source.sites import main_menu, load_screen, arena as arena_module
 
 
 # ============================================
-# 简单神经网络实现（不使用外部库）
+# 神经网络实现 (Pure Python)
 # ============================================
-
-def sigmoid(x):
-    """Sigmoid激活函数"""
-    # 防止溢出
-    x = max(-500, min(500, x))
-    return 1.0 / (1.0 + math.exp(-x))
-
-
-def tanh(x):
-    """Tanh激活函数"""
-    x = max(-500, min(500, x))
-    return math.tanh(x)
-
-
-def relu(x):
-    """ReLU激活函数"""
-    return max(0, x)
-
 
 class SimpleNeuralNetwork:
     """
-    简单的前馈神经网络
-    支持多层隐藏层
+    纯 Python 前馈神经网络
     """
     def __init__(self, input_size, hidden_sizes, output_size):
         self.input_size = input_size
         self.hidden_sizes = hidden_sizes
         self.output_size = output_size
         
-        self.layers = []
-        # 输入层 -> 第一隐藏层
-        prev_size = input_size
-        for h_size in hidden_sizes:
-            weights = [[random.uniform(-1, 1) for _ in range(prev_size)] 
-                       for _ in range(h_size)]
-            bias = [random.uniform(-1, 1) for _ in range(h_size)]
-            self.layers.append({'weights': weights, 'bias': bias})
-            prev_size = h_size
+        # 初始化权重和偏置
+        self.weights = []
+        self.biases = []
+        
+        layer_sizes = [input_size] + hidden_sizes + [output_size]
+        
+        for i in range(len(layer_sizes) - 1):
+            # Xavier/Glorot initialization approximation
+            limit = math.sqrt(6 / (layer_sizes[i] + layer_sizes[i+1]))
+            w = [[random.uniform(-limit, limit) for _ in range(layer_sizes[i+1])] for _ in range(layer_sizes[i])]
+            b = [0.0 for _ in range(layer_sizes[i+1])]
+            self.weights.append(w)
+            self.biases.append(b)
+    
+    def sigmoid(self, x):
+        try:
+            return 1 / (1 + math.exp(-x))
+        except OverflowError:
+            return 0 if x < 0 else 1
             
-        # 最后一层隐藏层 -> 输出层
-        weights = [[random.uniform(-1, 1) for _ in range(prev_size)] 
-                   for _ in range(output_size)]
-        bias = [random.uniform(-1, 1) for _ in range(output_size)]
-        self.layers.append({'weights': weights, 'bias': bias})
+    def relu(self, x):
+        return max(0, x)
     
     def forward(self, inputs):
         """前向传播"""
-        current_inputs = inputs
+        current_activations = inputs
         
-        # 隐藏层 (使用 ReLU)
-        for i in range(len(self.layers) - 1):
-            layer = self.layers[i]
-            next_inputs = []
-            for j in range(len(layer['bias'])):
-                sum_val = layer['bias'][j]
-                for k in range(len(current_inputs)):
-                    sum_val += current_inputs[k] * layer['weights'][j][k]
-                next_inputs.append(relu(sum_val))
-            current_inputs = next_inputs
+        for i in range(len(self.weights)):
+            next_activations = []
+            w = self.weights[i]
+            b = self.biases[i]
             
-        # 输出层 (使用 Sigmoid)
-        layer = self.layers[-1]
-        outputs = []
-        for i in range(len(layer['bias'])):
-            sum_val = layer['bias'][i]
-            for k in range(len(current_inputs)):
-                sum_val += current_inputs[k] * layer['weights'][i][k]
-            outputs.append(sigmoid(sum_val))
-        
-        return outputs
+            for j in range(len(b)): 
+                activation = b[j]
+                for k in range(len(current_activations)):
+                    activation += current_activations[k] * w[k][j]
+                
+                if i == len(self.weights) - 1:
+                    next_activations.append(self.sigmoid(activation))
+                else:
+                    next_activations.append(self.relu(activation))
+            
+            current_activations = next_activations
+            
+        return current_activations
     
     def get_weights(self):
         """获取所有权重作为一维列表"""
-        weights = []
-        for layer in self.layers:
-            for row in layer['weights']:
-                weights.extend(row)
-            weights.extend(layer['bias'])
-        return weights
+        flat = []
+        for w_matrix in self.weights:
+            for row in w_matrix:
+                flat.extend(row)
+        for b_vec in self.biases:
+            flat.extend(b_vec)
+        return flat
     
-    def set_weights(self, weights):
+    def set_weights(self, flat_weights):
         """从一维列表设置权重"""
         idx = 0
-        for layer in self.layers:
-            for i in range(len(layer['bias'])):
-                for j in range(len(layer['weights'][i])):
-                    layer['weights'][i][j] = weights[idx]
+        for i in range(len(self.weights)):
+            # Set weights
+            rows = len(self.weights[i])
+            cols = len(self.weights[i][0])
+            for r in range(rows):
+                for c in range(cols):
+                    self.weights[i][r][c] = flat_weights[idx]
                     idx += 1
-            for i in range(len(layer['bias'])):
-                layer['bias'][i] = weights[idx]
+            # Set biases
+            cols = len(self.biases[i])
+            for c in range(cols):
+                self.biases[i][c] = flat_weights[idx]
                 idx += 1
     
     def get_weight_count(self):
         """获取权重总数"""
         count = 0
-        for layer in self.layers:
-            # weights count: rows * cols
-            count += len(layer['weights']) * len(layer['weights'][0])
-            # bias count
-            count += len(layer['bias'])
+        for w in self.weights:
+            count += len(w) * len(w[0])
+        for b in self.biases:
+            count += len(b)
         return count
     
     def copy(self):
         """复制神经网络"""
-        new_nn = SimpleNeuralNetwork(self.input_size, self.hidden_sizes, self.output_size)
-        new_nn.set_weights(self.get_weights())
-        return new_nn
+        new_net = SimpleNeuralNetwork(self.input_size, self.hidden_sizes, self.output_size)
+        # Deep copy
+        new_net.weights = [[row[:] for row in w] for w in self.weights]
+        new_net.biases = [b[:] for b in self.biases]
+        return new_net
+
 
 
 # ============================================
@@ -447,7 +444,16 @@ class GeneticAlgorithm:
         对每个控制器的权重进行交叉
         """
         if random.random() > self.crossover_rate:
-            return parent1, parent2
+            # 不交叉，直接复制 (需要深拷贝)
+            child1 = {
+                'controllers': [NeuralNetworkTankController(i+1, p.nn.copy()) for i, p in enumerate(parent1['controllers'])],
+                'fitness': 0
+            }
+            child2 = {
+                'controllers': [NeuralNetworkTankController(i+1, p.nn.copy()) for i, p in enumerate(parent2['controllers'])],
+                'fitness': 0
+            }
+            return child1, child2
         
         child1 = {
             'controllers': [],
@@ -459,7 +465,7 @@ class GeneticAlgorithm:
         }
         
         for i in range(3):
-            # 获取父代权重
+            # 获取父代权重 (list)
             weights1 = parent1['controllers'][i].nn.get_weights()
             weights2 = parent2['controllers'][i].nn.get_weights()
             
@@ -488,9 +494,9 @@ class GeneticAlgorithm:
         for controller in individual['controllers']:
             weights = controller.nn.get_weights()
             
+            # 列表变异
             for i in range(len(weights)):
                 if random.random() < self.mutation_rate:
-                    # 高斯变异
                     weights[i] += random.gauss(0, 0.3)
                     # 限制范围
                     weights[i] = max(-2, min(2, weights[i]))
@@ -513,14 +519,9 @@ class GeneticAlgorithm:
         sorted_pop = sorted(self.population, key=lambda x: x['fitness'], reverse=True)
         for i in range(2):
             elite = {
-                'controllers': [c.nn.copy() for c in sorted_pop[i]['controllers']],
-                'fitness': 0
+                'controllers': [NeuralNetworkTankController(j + 1, sorted_pop[i]['controllers'][j].nn.copy()) for j in range(3)],
+                'fitness': sorted_pop[i]['fitness']
             }
-            # 重新创建控制器
-            elite['controllers'] = [
-                NeuralNetworkTankController(j + 1, sorted_pop[i]['controllers'][j].nn.copy())
-                for j in range(3)
-            ]
             new_population.append(elite)
         
         # 生成其余个体
@@ -542,18 +543,23 @@ class GeneticAlgorithm:
         best_in_gen = max(self.population, key=lambda x: x['fitness'])
         if best_in_gen['fitness'] > self.best_fitness:
             self.best_fitness = best_in_gen['fitness']
-            self.best_individual = best_in_gen
+            # 深拷贝最佳个体
+            self.best_individual = {
+                'controllers': [NeuralNetworkTankController(j + 1, best_in_gen['controllers'][j].nn.copy()) for j in range(3)],
+                'fitness': best_in_gen['fitness']
+            }
         
         self.fitness_history.append(self.best_fitness)
     
-    def save(self, filename):
+    def save(self, filename, extra_data=None):
         """保存最佳个体"""
         if self.best_individual:
             data = {
                 'generation': self.generation,
                 'best_fitness': self.best_fitness,
                 'weights': [c.nn.get_weights() for c in self.best_individual['controllers']],
-                'fitness_history': self.fitness_history
+                'fitness_history': self.fitness_history,
+                'extra_data': extra_data
             }
             with open(filename, 'wb') as f:
                 pickle.dump(data, f)
@@ -568,6 +574,7 @@ class GeneticAlgorithm:
             self.generation = data['generation']
             self.best_fitness = data['best_fitness']
             self.fitness_history = data.get('fitness_history', [])
+            extra_data = data.get('extra_data', None)
             
             # 恢复最佳个体
             self.best_individual = {
@@ -580,8 +587,8 @@ class GeneticAlgorithm:
                 self.best_individual['controllers'].append(controller)
             
             print(f"Loaded from {filename}, generation {self.generation}, best fitness {self.best_fitness}")
-            return True
-        return False
+            return extra_data
+        return None
 
 
 # ============================================
@@ -785,8 +792,12 @@ def train_ga(generations=100, population_size=20, games_per_eval=3,
     speed: 游戏速度倍率
     fixed_maze: 是否使用固定迷宫
     """
+    # 配置日志
+    logging.basicConfig(filename='training.log', level=logging.INFO, 
+                        format='%(asctime)s - %(message)s', filemode='a')
+    
     print("="*50)
-    print("遗传算法训练器 - Tank Trouble")
+    print("遗传算法训练器 - Tank Trouble (Pure Python)")
     print("="*50)
     print(f"种群大小: {population_size}")
     print(f"训练代数: {generations}")
@@ -795,17 +806,25 @@ def train_ga(generations=100, population_size=20, games_per_eval=3,
     print(f"固定迷宫: {fixed_maze}")
     print("="*50)
     
+    logging.info(f"Starting training: pop={population_size}, gens={generations}, fixed_maze={fixed_maze}")
+    
     # 初始化
     ga = GeneticAlgorithm(population_size=population_size)
     env = GATrainingEnvironment(render=render, speed=speed, fixed_maze=fixed_maze)
     
     # 尝试加载检查点
     checkpoint_file = 'ga_checkpoint.pkl'
-    if load_checkpoint and ga.load(checkpoint_file):
-        print(f"从检查点继续训练，当前代数: {ga.generation}")
+    if load_checkpoint:
+        extra_data = ga.load(checkpoint_file)
+        if extra_data is not None or ga.generation > 0:
+            print(f"从检查点继续训练，当前代数: {ga.generation}")
+            if fixed_maze and isinstance(extra_data, dict) and 'map_seed' in extra_data:
+                env.map_seed = extra_data['map_seed']
+                print(f"恢复地图种子: {env.map_seed}")
     
     try:
         for gen in range(ga.generation, generations):
+            start_time = time.time()
             print(f"\n--- 第 {gen + 1}/{generations} 代 ---")
             
             # 评估每个个体
@@ -832,23 +851,31 @@ def train_ga(generations=100, population_size=20, games_per_eval=3,
             # 打印统计信息
             avg_fitness = sum(ind['fitness'] for ind in ga.population) / len(ga.population)
             best_fitness = max(ind['fitness'] for ind in ga.population)
+            duration = time.time() - start_time
+            
             print(f"  平均适应度: {avg_fitness:.2f}, 最佳适应度: {best_fitness:.2f}")
             print(f"  历史最佳适应度: {ga.best_fitness:.2f}")
+            print(f"  耗时: {duration:.2f}s")
+            
+            logging.info(f"Gen {gen+1}: Avg={avg_fitness:.2f}, Best={best_fitness:.2f}, HistBest={ga.best_fitness:.2f}, Time={duration:.2f}s")
             
             # 进化
             ga.evolve()
             
             # 定期保存
             if (gen + 1) % save_interval == 0:
-                ga.save(checkpoint_file)
+                extra_data = {'map_seed': env.map_seed} if fixed_maze else None
+                ga.save(checkpoint_file, extra_data=extra_data)
         
         # 训练完成，保存最终结果
-        ga.save('ga_final.pkl')
+        extra_data = {'map_seed': env.map_seed} if fixed_maze else None
+        ga.save('ga_final.pkl', extra_data=extra_data)
         print("\n训练完成！")
         
     except KeyboardInterrupt:
         print("\n训练被中断，保存当前进度...")
-        ga.save(checkpoint_file)
+        extra_data = {'map_seed': env.map_seed} if fixed_maze else None
+        ga.save(checkpoint_file, extra_data=extra_data)
     
     return ga
 

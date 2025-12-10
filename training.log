@@ -1,0 +1,11 @@
+2025-12-10 11:58:29,576 - Starting training: pop=20, gens=100, fixed_maze=False
+2025-12-10 11:59:02,370 - Starting training: pop=20, gens=100, fixed_maze=False
+2025-12-10 12:07:20,827 - Starting training: pop=15, gens=50, fixed_maze=False
+2025-12-10 12:11:19,470 - Starting training: pop=15, gens=50, fixed_maze=False
+2025-12-10 12:12:24,299 - Starting training: pop=15, gens=100, fixed_maze=True
+2025-12-10 12:22:43,392 - Gen 1: Avg=267.47, Best=1523.69, HistBest=-inf, Time=619.01s
+2025-12-10 12:32:59,495 - Gen 2: Avg=291.22, Best=1408.05, HistBest=1523.69, Time=616.03s
+2025-12-10 12:42:38,638 - Gen 3: Avg=344.85, Best=1350.33, HistBest=1523.69, Time=579.08s
+2025-12-10 12:51:12,902 - Gen 4: Avg=463.34, Best=879.55, HistBest=1523.69, Time=514.20s
+2025-12-10 13:01:42,324 - Gen 5: Avg=336.98, Best=1233.99, HistBest=1523.69, Time=629.36s
+2025-12-10 13:09:47,419 - Gen 6: Avg=462.44, Best=880.06, HistBest=1523.69, Time=485.03s

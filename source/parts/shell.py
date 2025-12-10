@@ -61,7 +61,8 @@ class Shell(pygame.sprite.Sprite):
 
     def update_hit(self):
         for aplayer in self.arena.players:
-            if self.protection and aplayer is self.player:
+            # Modified: Prevent bullet from hurting its owner
+            if aplayer is self.player:
                 continue
             if abs(self.x-aplayer.x)/C.MOTION_CALC_SCALE > C.PLAYER_PX or abs(self.y-aplayer.y)/C.MOTION_CALC_SCALE > C.PLAYER_PX:
                 continue
