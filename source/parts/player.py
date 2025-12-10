@@ -31,6 +31,8 @@ class player(pygame.sprite.Sprite):
         self.theta = 0
         self.round_num = 0
         self.exploding = False
+        self.kills = 0
+        self.suicides = 0
         self.rounds = pygame.sprite.Group()
         self.particles = pygame.sprite.Group()
 

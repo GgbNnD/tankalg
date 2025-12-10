@@ -218,10 +218,14 @@ class Arena:
                 cx, cy = w.rect.center
                 wh, hh = w.rect.w, w.rect.h
                 if normalize:
-                    cx = float(cx) / max(1.0, C.SCREEN_W)
-                    cy = float(cy) / max(1.0, C.SCREEN_H)
-                    wh = float(wh) / max(1.0, C.SCREEN_W)
-                    hh = float(hh) / max(1.0, C.SCREEN_H)
+                    # Normalize to Map Coordinates (0-1) instead of Screen Coordinates
+                    map_w = C.COLUMN_NUM * C.BLOCK_SIZE
+                    map_h = C.ROW_NUM * C.BLOCK_SIZE
+                    
+                    cx = (float(cx) - C.LEFT_SPACE) / max(1.0, map_w)
+                    cy = (float(cy) - C.TOP_SPACE) / max(1.0, map_h)
+                    wh = float(wh) / max(1.0, map_w)
+                    hh = float(hh) / max(1.0, map_h)
                 walls.append({'x': cx, 'y': cy, 'w': wh, 'h': hh})
         return walls
 
@@ -239,8 +243,10 @@ class Arena:
         for s in self.supplies:
             cx, cy = s.rect.center
             if normalize:
-                cx = float(cx) / max(1.0, C.SCREEN_W)
-                cy = float(cy) / max(1.0, C.SCREEN_H)
+                map_w = C.COLUMN_NUM * C.BLOCK_SIZE
+                map_h = C.ROW_NUM * C.BLOCK_SIZE
+                cx = (float(cx) - C.LEFT_SPACE) / max(1.0, map_w)
+                cy = (float(cy) - C.TOP_SPACE) / max(1.0, map_h)
             supplies.append({'x': float(cx), 'y': float(cy), 'type': int(s.type)})
             
         return {

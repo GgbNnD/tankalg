@@ -69,6 +69,10 @@ class Shell(pygame.sprite.Sprite):
                 self, aplayer.hitboxes)
             if hitbox:
                 aplayer.go_die()
+                if aplayer is not self.player:
+                    self.player.kills += 1
+                else:
+                    self.player.suicides += 1
                 self.go_die()
                 return
 

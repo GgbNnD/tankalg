@@ -157,6 +157,7 @@ class NeuralNetworkTankController:
         # 适应度跟踪
         self.fitness = 0
         self.kills = 0
+        self.suicides = 0
         self.damage_dealt = 0
         self.survival_time = 0
         self.distance_traveled = 0
@@ -165,6 +166,8 @@ class NeuralNetworkTankController:
         self.total_rotation = 0
         self.last_angle = None
         self.stuck_time = 0
+        self.sum_distance_to_enemy = 0
+        self.steps = 0
     
     def extract_features(self, game_state):
         """从游戏状态提取特征"""
@@ -211,11 +214,16 @@ class NeuralNetworkTankController:
         
         # 计算到敌人的相对位置和角度
         enemy_features = []
+        
+        # Map aspect ratio for correct angle calculation
+        # Width = 12 * 94 = 1128, Height = 6 * 94 = 564. Ratio = 2.0
+        aspect_ratio = 2.0
+        
         for enemy in enemies:
             ex = enemy.get('x', 0.5)
             ey = enemy.get('y', 0.5)
-            dx = ex - my_x
-            dy = ey - my_y
+            dx = (ex - my_x) * aspect_ratio # Correct for aspect ratio
+            dy = (ey - my_y) * 1.0
             dist = math.sqrt(dx*dx + dy*dy) + 0.001
             
             # 相对角度
@@ -233,6 +241,10 @@ class NeuralNetworkTankController:
         
         # 排序，取最近的两个敌人
         enemy_features.sort(key=lambda x: x[0])
+        
+        if enemy_features:
+            self.sum_distance_to_enemy += enemy_features[0][0]
+            self.steps += 1
         
         for i in range(2):
             if i < len(enemy_features):
@@ -261,8 +273,8 @@ class NeuralNetworkTankController:
             for wall in walls:
                 wx = wall.get('x', 0)
                 wy = wall.get('y', 0)
-                dx = wx - my_x
-                dy = wy - my_y
+                dx = (wx - my_x) * aspect_ratio # Correct for aspect ratio
+                dy = (wy - my_y) * 1.0
                 dist = math.sqrt(dx*dx + dy*dy)
                 
                 # 检查墙是否在这个方向
@@ -280,9 +292,9 @@ class NeuralNetworkTankController:
         supplies = game_state.get('supplies', [])
         if supplies:
             nearest_supply = min(supplies, 
-                                key=lambda s: (s.get('x', 0.5) - my_x)**2 + (s.get('y', 0.5) - my_y)**2)
-            features.extend([nearest_supply.get('x', 0.5) - my_x, 
-                           nearest_supply.get('y', 0.5) - my_y])
+                                key=lambda s: ((s.get('x', 0.5) - my_x)*aspect_ratio)**2 + (s.get('y', 0.5) - my_y)**2)
+            features.extend([(nearest_supply.get('x', 0.5) - my_x)*aspect_ratio, 
+                           (nearest_supply.get('y', 0.5) - my_y)])
         else:
             features.extend([0.0, 0.0])
             
@@ -291,12 +303,12 @@ class NeuralNetworkTankController:
         if shells:
             # 找到最近的子弹
             nearest_shell = min(shells, 
-                               key=lambda s: (s.get('x', 0) - my_x)**2 + (s.get('y', 0) - my_y)**2)
+                               key=lambda s: ((s.get('x', 0) - my_x)*aspect_ratio)**2 + (s.get('y', 0) - my_y)**2)
             
-            sdx = nearest_shell.get('x', 0) - my_x
-            sdy = nearest_shell.get('y', 0) - my_y
+            sdx = (nearest_shell.get('x', 0) - my_x) * aspect_ratio
+            sdy = (nearest_shell.get('y', 0) - my_y)
             sdist = math.sqrt(sdx*sdx + sdy*sdy)
-            svx = nearest_shell.get('vx', 0)
+            svx = nearest_shell.get('vx', 0) * aspect_ratio
             svy = nearest_shell.get('vy', 0)
             
             features.extend([sdx, sdy, svx, svy, min(sdist, 1.0)])
@@ -328,12 +340,61 @@ class NeuralNetworkTankController:
         if action['turn_left'] and action['turn_right']:
             action['turn_right'] = False
         
+        # --- Heuristic Safety Layer (预定义策略层) ---
+        
+        # 1. Anti-Stuck (防卡死) - 已移除，避免抽搐
+        # if self.stuck_time > 20: ...
+        
+        # 2. Wall Avoidance (防撞墙)
+        # features indices: 13=Front, 14=RF, 15=R, 16=RB, 17=Back, 18=LB, 19=L, 20=LF
+        SAFE_DIST = 0.01  # 降低到0.01，避免过早干预
+        
+        # 前方防撞
+        front_dist = features[13]
+        left_front = features[20]
+        right_front = features[14]
+        
+        if action['move_forward'] and front_dist < SAFE_DIST:
+             action['move_forward'] = False
+             # 向空旷处转弯
+             if left_front > right_front:
+                 action['turn_left'] = True
+                 action['turn_right'] = False
+             else:
+                 action['turn_right'] = True
+                 action['turn_left'] = False
+
+        # 后方防撞 (防止倒车撞墙)
+        back_dist = features[17]
+        left_back = features[18]
+        right_back = features[16]
+        
+        if action['move_backward'] and back_dist < SAFE_DIST:
+             action['move_backward'] = False
+             # 停止倒车
+        
+        # 3. Aim Assist (辅助瞄准)
+        # 如果敌人大致在正前方，强制射击
+        # Enemy 1 relative angle is at index 7
+        # Enemy 2 relative angle is at index 11
+        # Angle is normalized [-1, 1]
+        SHOOT_THRESHOLD = 0.05 # ~9 degrees
+        
+        rel_angle_1 = features[7]
+        rel_angle_2 = features[11]
+        
+        # 检查是否有敌人在射击角度内且距离不是太远(features[8] is dist)
+        if (abs(rel_angle_1) < SHOOT_THRESHOLD and features[8] < 0.8) or \
+           (abs(rel_angle_2) < SHOOT_THRESHOLD and features[12] < 0.8):
+            action['shoot'] = True
+        
         return action
     
     def reset(self):
         """重置适应度追踪"""
         self.fitness = 0
         self.kills = 0
+        self.suicides = 0
         self.damage_dealt = 0
         self.survival_time = 0
         self.distance_traveled = 0
@@ -342,6 +403,8 @@ class NeuralNetworkTankController:
         self.total_rotation = 0
         self.last_angle = None
         self.stuck_time = 0
+        self.sum_distance_to_enemy = 0
+        self.steps = 0
 
 
 # ============================================
@@ -374,6 +437,23 @@ class GeneticAlgorithm:
         self.best_individual = None
         self.best_fitness = float('-inf')
         self.fitness_history = []
+        
+        # Initialize log file
+        self.log_file = 'training_log.csv'
+        if not os.path.exists(self.log_file):
+            with open(self.log_file, 'w') as f:
+                f.write("Generation,BestFitness,AvgFitness,MaxKills,MaxSurvival\n")
+    
+    def log_stats(self, best_ind, avg_fitness):
+        """Log training statistics to CSV"""
+        max_kills = 0
+        max_survival = 0
+        for c in best_ind['controllers']:
+            max_kills = max(max_kills, c.kills)
+            max_survival = max(max_survival, c.survival_time)
+            
+        with open(self.log_file, 'a') as f:
+            f.write(f"{self.generation},{self.best_fitness:.2f},{avg_fitness:.2f},{max_kills},{max_survival}\n")
     
     def evaluate_fitness(self, controllers, game_result):
         """
@@ -390,26 +470,34 @@ class GeneticAlgorithm:
             survival_bonus = controller.survival_time / 2000.0  # 每2秒1分
             
             # 2. 击杀奖励 (大幅提高，鼓励进攻)
-            kill_bonus = controller.kills * 200  # 每次击杀200分
+            kill_bonus = controller.kills * 500  # 每次击杀500分
             
             # 3. 移动奖励（鼓励探索，但惩罚原地打转）
             # 如果旋转过多，移动奖励减少
             rotation_penalty = max(0, controller.total_rotation - 20) * 2 # 允许一定旋转，超过后扣分
-            movement_bonus = max(0, min(controller.distance_traveled * 5, 30) - rotation_penalty)
+            movement_bonus = max(0, controller.distance_traveled * 10 - rotation_penalty)
             
             # 4. 胜利奖励
             winner_bonus = 0
             if game_result.get('winner') == player_name:
-                winner_bonus = 300
+                winner_bonus = 500
             
             # 5. 撞墙惩罚
-            stuck_penalty = controller.stuck_time * 0.5 # 每帧撞墙扣0.5分
+            stuck_penalty = controller.stuck_time * 2.0 # 每帧撞墙扣2分
             
             # 6. 最后存活奖励
             if not game_result.get(f'player_{player_name}_dead', True):
-                survival_bonus += 50
+                survival_bonus += 100
             
-            controller.fitness = survival_bonus + kill_bonus + movement_bonus + winner_bonus - stuck_penalty
+            # 7. 自杀惩罚
+            suicide_penalty = controller.suicides * 500
+            
+            # 8. 不活跃惩罚
+            inactivity_penalty = 0
+            if controller.distance_traveled < 2.0:
+                inactivity_penalty = 200
+            
+            controller.fitness = survival_bonus + kill_bonus + movement_bonus + winner_bonus - stuck_penalty - inactivity_penalty - suicide_penalty
             total_fitness += controller.fitness
         
         return total_fitness
@@ -532,6 +620,10 @@ class GeneticAlgorithm:
             self.best_individual = best_in_gen
         
         self.fitness_history.append(self.best_fitness)
+        
+        # Calculate average fitness
+        avg_fitness = sum(ind['fitness'] for ind in self.population) / len(self.population)
+        self.log_stats(best_in_gen, avg_fitness)
     
     def save(self, filename):
         """保存最佳个体"""
@@ -716,6 +808,10 @@ class GATrainingEnvironment:
                 player_name = i + 1
                 for p in arena.players:
                     if p.name == player_name:
+                        # Sync kills and suicides
+                        controller.kills = p.kills
+                        controller.suicides = p.suicides
+                        
                         if not p.dead:
                             controller.survival_time = game_time
                         else:
