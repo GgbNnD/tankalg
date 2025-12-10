@@ -47,38 +47,51 @@ def relu(x):
 class SimpleNeuralNetwork:
     """
     简单的前馈神经网络
-    输入层 -> 隐藏层 -> 输出层
+    支持多层隐藏层
     """
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, hidden_sizes, output_size):
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.hidden_sizes = hidden_sizes
         self.output_size = output_size
         
-        # 随机初始化权重
-        self.weights_ih = [[random.uniform(-1, 1) for _ in range(input_size)] 
-                           for _ in range(hidden_size)]
-        self.bias_h = [random.uniform(-1, 1) for _ in range(hidden_size)]
-        
-        self.weights_ho = [[random.uniform(-1, 1) for _ in range(hidden_size)] 
-                           for _ in range(output_size)]
-        self.bias_o = [random.uniform(-1, 1) for _ in range(output_size)]
+        self.layers = []
+        # 输入层 -> 第一隐藏层
+        prev_size = input_size
+        for h_size in hidden_sizes:
+            weights = [[random.uniform(-1, 1) for _ in range(prev_size)] 
+                       for _ in range(h_size)]
+            bias = [random.uniform(-1, 1) for _ in range(h_size)]
+            self.layers.append({'weights': weights, 'bias': bias})
+            prev_size = h_size
+            
+        # 最后一层隐藏层 -> 输出层
+        weights = [[random.uniform(-1, 1) for _ in range(prev_size)] 
+                   for _ in range(output_size)]
+        bias = [random.uniform(-1, 1) for _ in range(output_size)]
+        self.layers.append({'weights': weights, 'bias': bias})
     
     def forward(self, inputs):
         """前向传播"""
-        # 输入层 -> 隐藏层
-        hidden = []
-        for i in range(self.hidden_size):
-            sum_val = self.bias_h[i]
-            for j in range(self.input_size):
-                sum_val += inputs[j] * self.weights_ih[i][j]
-            hidden.append(tanh(sum_val))
+        current_inputs = inputs
         
-        # 隐藏层 -> 输出层
+        # 隐藏层 (使用 ReLU)
+        for i in range(len(self.layers) - 1):
+            layer = self.layers[i]
+            next_inputs = []
+            for j in range(len(layer['bias'])):
+                sum_val = layer['bias'][j]
+                for k in range(len(current_inputs)):
+                    sum_val += current_inputs[k] * layer['weights'][j][k]
+                next_inputs.append(relu(sum_val))
+            current_inputs = next_inputs
+            
+        # 输出层 (使用 Sigmoid)
+        layer = self.layers[-1]
         outputs = []
-        for i in range(self.output_size):
-            sum_val = self.bias_o[i]
-            for j in range(self.hidden_size):
-                sum_val += hidden[j] * self.weights_ho[i][j]
+        for i in range(len(layer['bias'])):
+            sum_val = layer['bias'][i]
+            for k in range(len(current_inputs)):
+                sum_val += current_inputs[k] * layer['weights'][i][k]
             outputs.append(sigmoid(sum_val))
         
         return outputs
@@ -86,40 +99,37 @@ class SimpleNeuralNetwork:
     def get_weights(self):
         """获取所有权重作为一维列表"""
         weights = []
-        for row in self.weights_ih:
-            weights.extend(row)
-        weights.extend(self.bias_h)
-        for row in self.weights_ho:
-            weights.extend(row)
-        weights.extend(self.bias_o)
+        for layer in self.layers:
+            for row in layer['weights']:
+                weights.extend(row)
+            weights.extend(layer['bias'])
         return weights
     
     def set_weights(self, weights):
         """从一维列表设置权重"""
         idx = 0
-        for i in range(self.hidden_size):
-            for j in range(self.input_size):
-                self.weights_ih[i][j] = weights[idx]
+        for layer in self.layers:
+            for i in range(len(layer['bias'])):
+                for j in range(len(layer['weights'][i])):
+                    layer['weights'][i][j] = weights[idx]
+                    idx += 1
+            for i in range(len(layer['bias'])):
+                layer['bias'][i] = weights[idx]
                 idx += 1
-        for i in range(self.hidden_size):
-            self.bias_h[i] = weights[idx]
-            idx += 1
-        for i in range(self.output_size):
-            for j in range(self.hidden_size):
-                self.weights_ho[i][j] = weights[idx]
-                idx += 1
-        for i in range(self.output_size):
-            self.bias_o[i] = weights[idx]
-            idx += 1
     
     def get_weight_count(self):
         """获取权重总数"""
-        return (self.input_size * self.hidden_size + self.hidden_size +
-                self.hidden_size * self.output_size + self.output_size)
+        count = 0
+        for layer in self.layers:
+            # weights count: rows * cols
+            count += len(layer['weights']) * len(layer['weights'][0])
+            # bias count
+            count += len(layer['bias'])
+        return count
     
     def copy(self):
         """复制神经网络"""
-        new_nn = SimpleNeuralNetwork(self.input_size, self.hidden_size, self.output_size)
+        new_nn = SimpleNeuralNetwork(self.input_size, self.hidden_sizes, self.output_size)
         new_nn.set_weights(self.get_weights())
         return new_nn
 
@@ -146,13 +156,13 @@ class NeuralNetworkTankController:
         # - 最近子弹相对位置(2) + 速度(2) + 距离(1) = 5
         # 总计: 28
         self.input_size = 28
-        self.hidden_size = 24
+        self.hidden_sizes = [64, 32] # 增加网络深度和宽度
         self.output_size = 5  # forward, backward, left, right, shoot
         
         if neural_network:
             self.nn = neural_network
         else:
-            self.nn = SimpleNeuralNetwork(self.input_size, self.hidden_size, self.output_size)
+            self.nn = SimpleNeuralNetwork(self.input_size, self.hidden_sizes, self.output_size)
         
         # 适应度跟踪
         self.fitness = 0
@@ -386,30 +396,33 @@ class GeneticAlgorithm:
             player_name = i + 1
             
             # 基础适应度组成：
-            # 1. 存活时间奖励 (降低权重，防止只为了生存而躲避)
-            survival_bonus = controller.survival_time / 2000.0  # 每2秒1分
-            
+            # 1. 存活时间奖励 (提高权重)
+            survival_bonus = controller.survival_time / 1000.0  # 每1秒1分
+            survival_bonus = 0.0
             # 2. 击杀奖励 (大幅提高，鼓励进攻)
-            kill_bonus = controller.kills * 200  # 每次击杀200分
+            kill_bonus = controller.kills * 500  # 每次击杀500分
             
             # 3. 移动奖励（鼓励探索，但惩罚原地打转）
             # 如果旋转过多，移动奖励减少
-            rotation_penalty = max(0, controller.total_rotation - 20) * 2 # 允许一定旋转，超过后扣分
-            movement_bonus = max(0, min(controller.distance_traveled * 5, 30) - rotation_penalty)
+            # rotation_penalty = max(0, controller.total_rotation - 50) * 0.5 # 放宽旋转限制
+            movement_bonus = max(0, min(controller.distance_traveled * 5, 100))
             
             # 4. 胜利奖励
             winner_bonus = 0
             if game_result.get('winner') == player_name:
-                winner_bonus = 300
+                winner_bonus = 1000
             
             # 5. 撞墙惩罚
-            stuck_penalty = controller.stuck_time * 0.5 # 每帧撞墙扣0.5分
+            stuck_penalty = controller.stuck_time * 1.0 # 每帧撞墙扣1分
             
             # 6. 最后存活奖励
             if not game_result.get(f'player_{player_name}_dead', True):
-                survival_bonus += 50
+                survival_bonus += 100
             
             controller.fitness = survival_bonus + kill_bonus + movement_bonus + winner_bonus - stuck_penalty
+            # 确保适应度不为负
+            controller.fitness = max(0, controller.fitness)
+            
             total_fitness += controller.fitness
         
         return total_fitness
@@ -579,15 +592,22 @@ class GATrainingEnvironment:
     """
     遗传算法训练环境
     """
-    def __init__(self, render=True, max_game_time=30000, speed=1.0):
+    def __init__(self, render=True, max_game_time=30000, speed=1.0, fixed_maze=False):
         """
         render: 是否渲染游戏画面
         max_game_time: 最大游戏时间（毫秒）
         speed: 游戏速度倍率
+        fixed_maze: 是否使用固定迷宫
         """
         self.render = render
         self.max_game_time = max_game_time
         self.speed = speed
+        self.fixed_maze = fixed_maze
+        self.map_seed = None
+        
+        if fixed_maze:
+            self.map_seed = random.randint(0, 100000)
+            print(f"使用固定地图种子: {self.map_seed}")
         
         # 初始化pygame（如果还没有）
         if not pygame.get_init():
@@ -617,8 +637,8 @@ class GATrainingEnvironment:
         
         # 创建游戏状态
         arena = arena_module.Arena()
-        # 设置3个玩家
-        arena.setup(3, (0, 0, 0))
+        # 设置3个玩家，传入地图种子
+        arena.setup(3, (0, 0, 0), map_seed=self.map_seed)
         
         start_time = pygame.time.get_ticks()
         game_start_clock = arena.clock
@@ -635,6 +655,9 @@ class GATrainingEnvironment:
             'player_3_dead': False,
             'game_time': 0
         }
+        
+        # 记录已死亡玩家，防止重复计算
+        dead_players = set()
         
         running = True
         while running:
@@ -662,6 +685,20 @@ class GATrainingEnvironment:
                     if not p.dead:
                         result['winner'] = p.name
                 continue
+            
+            # 检查玩家死亡情况并更新击杀数
+            for p in arena.players:
+                if p.dead and p.name not in dead_players:
+                    dead_players.add(p.name)
+                    result[f'player_{p.name}_dead'] = True
+                    
+                    # 检查是否有击杀者
+                    if hasattr(p, 'killer') and p.killer:
+                        killer_name = p.killer.name
+                        # 找到对应的控制器并增加击杀数
+                        # controllers索引是 name-1
+                        if 1 <= killer_name <= 3:
+                            controllers[killer_name-1].kills += 1
             
             # 获取游戏状态
             game_state = arena.get_state(normalize=True)
@@ -735,7 +772,7 @@ class GATrainingEnvironment:
 
 
 def train_ga(generations=100, population_size=20, games_per_eval=3, 
-             render=True, save_interval=10, load_checkpoint=True, speed=1.0):
+             render=True, save_interval=10, load_checkpoint=True, speed=1.0, fixed_maze=False):
     """
     训练遗传算法
     
@@ -746,6 +783,7 @@ def train_ga(generations=100, population_size=20, games_per_eval=3,
     save_interval: 保存间隔
     load_checkpoint: 是否加载检查点
     speed: 游戏速度倍率
+    fixed_maze: 是否使用固定迷宫
     """
     print("="*50)
     print("遗传算法训练器 - Tank Trouble")
@@ -754,11 +792,12 @@ def train_ga(generations=100, population_size=20, games_per_eval=3,
     print(f"训练代数: {generations}")
     print(f"每个体评估游戏数: {games_per_eval}")
     print(f"游戏速度: {speed}x")
+    print(f"固定迷宫: {fixed_maze}")
     print("="*50)
     
     # 初始化
     ga = GeneticAlgorithm(population_size=population_size)
-    env = GATrainingEnvironment(render=render, speed=speed)
+    env = GATrainingEnvironment(render=render, speed=speed, fixed_maze=fixed_maze)
     
     # 尝试加载检查点
     checkpoint_file = 'ga_checkpoint.pkl'
@@ -864,6 +903,8 @@ if __name__ == '__main__':
                         help='检查点文件路径')
     parser.add_argument('--speed', type=float, default=1.0,
                         help='游戏速度倍率 (仅在渲染模式下有效)')
+    parser.add_argument('--fixed-maze', action='store_true',
+                        help='使用固定迷宫进行训练')
     
     args = parser.parse_args()
     
@@ -874,7 +915,8 @@ if __name__ == '__main__':
             games_per_eval=args.games,
             render=not args.no_render,
             load_checkpoint=True,
-            speed=args.speed
+            speed=args.speed,
+            fixed_maze=args.fixed_maze
         )
     elif args.mode == 'demo':
         demo_best(args.checkpoint)

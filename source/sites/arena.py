@@ -5,12 +5,13 @@ from .. import tools, setup, constants as C
 
 
 class Arena:
-    def setup(self, player_num, score):
+    def setup(self, player_num, score, map_seed=None):
         self.finished = False
         self.player_num = player_num
         self.score = score
         self.next = 'arena'
         self.random = random.random()
+        self.map_seed = map_seed
 
         self.setup_states()
         self.setup_map()
@@ -31,8 +32,17 @@ class Arena:
         self.map_surface = pygame.Surface((C.SCREEN_W, C.SCREEN_H)).convert()
         self.map_surface.fill(C.SCREEN_COLOR)
 
+        # 如果指定了地图种子，则使用固定种子生成迷宫
+        if self.map_seed is not None:
+            rng_state = random.getstate()
+            random.seed(self.map_seed)
+
         generate_maze.predeal(self)
         generate_maze.Generage_Maze(self, 0, 0, C.COLUMN_NUM-1, C.ROW_NUM-1)
+
+        # 恢复随机状态，以免影响后续（如玩家生成）的随机性
+        if self.map_seed is not None:
+            random.setstate(rng_state)
 
         for i in range(0, C.COLUMN_NUM*C.ROW_NUM):
             self.cells[i].draw_walls(self.map_surface)

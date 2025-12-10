@@ -290,11 +290,12 @@ class player(pygame.sprite.Sprite):
             self.y -= numpy.sin(alpha-self.theta) * k * \
                 C.MOTION_CALC_SCALE*numpy.cos(self.theta)
 
-    def go_die(self):
+    def go_die(self, killer=None):
         setup.SOUNDS['explosion'+str(int(self.random*6+1))].play()
         self.hitboxes.empty()
 
         self.dead = True
+        self.killer = killer  # 记录击杀者
         self.arena.rest_player_num -= 1
         self.arena.ending_timer = self.arena.clock
 

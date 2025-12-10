@@ -68,7 +68,7 @@ class Shell(pygame.sprite.Sprite):
             hitbox = pygame.sprite.spritecollideany(
                 self, aplayer.hitboxes)
             if hitbox:
-                aplayer.go_die()
+                aplayer.go_die(killer=self.player)
                 self.go_die()
                 return
 
