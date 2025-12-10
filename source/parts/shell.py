@@ -68,6 +68,14 @@ class Shell(pygame.sprite.Sprite):
             hitbox = pygame.sprite.spritecollideany(
                 self, aplayer.hitboxes)
             if hitbox:
+                # Record hit event for RL
+                if hasattr(self.arena, 'push_event'):
+                    self.arena.push_event({
+                        'type': 'hit',
+                        'attacker': self.player.name,
+                        'victim': aplayer.name
+                    })
+                
                 aplayer.go_die()
                 self.go_die()
                 return

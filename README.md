@@ -34,3 +34,26 @@ python main.py
 python debug_run.py
 ```
 
+# 强化学习训练
+```powershell
+# 图形化
+python source/rl/train.py
+
+# 命令行
+python source/rl/train.py --mode cli
+
+# 默认优先加载 Interrupted ，如无则加载 latest
+python source/rl/train.py --load auto
+# 或者直接 (默认就是 auto)
+python source/rl/train.py
+
+# 指定加载 latest
+python source/rl/train.py --load latest
+
+# 指定加载 interrupted
+python source/rl/train.py --load interrupted
+
+# 从头开始
+python source/rl/train.py --load none
+```
+    

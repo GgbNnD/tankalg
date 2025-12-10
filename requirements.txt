@@ -5,5 +5,10 @@
 #   Windows (cmd): .venv\Scripts\activate.bat
 # 需要 Python 3.10
 
+# 指向 CUDA 13.0 的 PyTorch 仓库 (如果不存在请尝试 cu126 或 cu124)
+--extra-index-url https://download.pytorch.org/whl/cu130
+
 numpy
 pygame
+torch
+torchvision

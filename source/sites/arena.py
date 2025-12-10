@@ -25,6 +25,22 @@ class Arena:
         self.ending_timer = 0
         self.celebrating = False
         self.celebrating_timer = 0
+        # --- RL Event Queue ---
+        self.event_queue = []
+
+    def push_event(self, event):
+        """
+        Push an event to the queue for RL reward calculation.
+        event: dict, e.g. {'type': 'hit', 'attacker': 1, 'victim': 2}
+        """
+        event['time'] = self.clock
+        self.event_queue.append(event)
+
+    def get_and_clear_events(self):
+        """Return all events since last call and clear the queue."""
+        events = list(self.event_queue)
+        self.event_queue.clear()
+        return events
 
     def setup_map(self):
         self.cells = []
@@ -48,15 +64,44 @@ class Arena:
         self.players = pygame.sprite.Group()
 
         vised = {}
+        player_positions = [] # Store (x, y) of placed players
+
         for i in range(3):
             if self.score[i] != -1:
                 aplayer = player.player(i+1, self)
-                x = int(random.random()*C.COLUMN_NUM)
-                y = int(random.random()*C.ROW_NUM)
-                while vised.get(generate_maze.get_idx(x, y), False):
+                
+                # Try to find a valid position
+                valid_pos = False
+                attempts = 0
+                while not valid_pos and attempts < 100:
                     x = int(random.random()*C.COLUMN_NUM)
                     y = int(random.random()*C.ROW_NUM)
-                vised[generate_maze.get_idx(x, y)] = True
+                    idx = generate_maze.get_idx(x, y)
+                    
+                    # Check if cell is already occupied
+                    if vised.get(idx, False):
+                        attempts += 1
+                        continue
+                        
+                    # Check distance to other players (Manhattan distance > 2 blocks)
+                    too_close = False
+                    for px, py in player_positions:
+                        if abs(px - x) + abs(py - y) < 3:
+                            too_close = True
+                            break
+                    
+                    if too_close:
+                        attempts += 1
+                        continue
+                        
+                    valid_pos = True
+                    vised[idx] = True
+                    player_positions.append((x, y))
+
+                # If we couldn't find a far spot, just take the last random one (fallback)
+                if not valid_pos:
+                     vised[generate_maze.get_idx(x, y)] = True
+
                 aplayer.x = self.cells[generate_maze.get_idx(
                     x, y)].rect.centerx*C.MOTION_CALC_SCALE
                 aplayer.y = self.cells[generate_maze.get_idx(
@@ -187,18 +232,18 @@ class Arena:
         return new_keys
 
     def update(self, surface, keys):
-        self.clock = pygame.time.get_ticks()
+        # Use internal clock if available, else wall clock
+        if hasattr(self, 'manual_clock') and self.manual_clock:
+            self.clock += 1000 / C.FRAME_RATE
+        else:
+            self.clock = pygame.time.get_ticks()
+            
         self.random = random.random()
         self.draw_map(surface)
 
         if not self.pause and not self.celebrating:
             for aplayer in self.players:
-                if aplayer.name == 2:
-                    # 玩家2 使用 AI 控制
-                    ai_keys = self.get_ai_keys(aplayer, keys)
-                    aplayer.update(ai_keys)
-                else:
-                    aplayer.update(keys)
+                aplayer.update(keys)
 
             self.update_supply()
 
