@@ -10,7 +10,7 @@ import csv
 def train(resume_path=None, log_file="training_log.csv"):
     # Hyperparameters
     POPULATION_SIZE = 50
-    GENERATIONS = 100
+    GENERATIONS = 200
     GAMES_PER_GEN = 5 # Each AI plays this many games
     NUM_PLAYERS = 4 # Number of tanks in one game
     

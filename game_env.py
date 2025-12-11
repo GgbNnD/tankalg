@@ -181,10 +181,13 @@ class TankGame:
             # No enemies (won or alone)
             state.extend([0, 0, 0, 0])
         
-        # 3. Bullets (3 closest) (3 * 4 = 12)
+        # 3. Bullets (3 closest from other players) (3 * 4 = 12)
         bullets_info = []
         for b in self.effect_bullets:
-            if not b.is_effect(): continue
+            if not b.is_effect():
+                continue
+            if b.owner is me:
+                continue
             d = abs(b.position - me.position)
             # Relative pos and velocity
             rel_b = b.position - me.position

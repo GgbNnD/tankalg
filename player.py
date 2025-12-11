@@ -62,6 +62,7 @@ class Player:
     P1,P2,P3,P4,P5,P6,P7,P8,P9,P10 = tuple(map(rect2polar,(-28+20j,-28-20j,28-20j,28-5j,40-5j,40+5j,28+5j,28+20j,15-5j,15+5j)))
     FORWARD,BACK,LEFT,RIGHT = 1,-1,-1,1
     MOVESPEED,TURNSPEED = propreties.data["playermovespeed"],propreties.data["playerturnspeed"]
+    SHOT_COOLDOWN = 30  # 最小发射间隔（帧数）
     def __init__(self,color:tuple):
         self.color = color
         self.score = 0
@@ -73,6 +74,7 @@ class Player:
         self.bullets = 5
         self.lives = 1
         self.turn_mode,self.move_mode = 0,0
+        self.cooldown = 0
     #通过坦克中心位置与其方向计算出各端点实际位置
     def getpoint(self,pn):
         angle = (pn[0]+self.angle)%(2*pi)
@@ -93,6 +95,8 @@ class Player:
     def update(self,mymap:Map):
         if self.lives <= 0:
             return
+        if self.cooldown > 0:
+            self.cooldown -= 1
         if self.turn_mode != 0:
             self.turn(self.turn_mode,mymap)
         if self.move_mode != 0:
@@ -127,8 +131,11 @@ class Player:
     def add_bullet(self):
         if self.lives <= 0:
             return
+        if self.cooldown > 0:
+            return None
         if self.bullets > 0:
             self.bullets -= 1
+            self.cooldown = self.SHOT_COOLDOWN
             return bullet.Bullet(c2t(self.position + complex(34*cos(self.angle),34*sin(self.angle))),self.angle,self)
         return None
     def move(self,mode:int,mymap:Map):

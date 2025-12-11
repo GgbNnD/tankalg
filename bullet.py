@@ -61,29 +61,24 @@ class Bullet:
         walls,center = mymap.getWalls(c2t(self.position))
         #判断离子弹最近的所有墙所组成的结构，将墙体结构简化为点与线的组合，交给bounce函数分析
         lines,points = mymap.getLines(walls,center),mymap.getPoints(walls,center)
-        self.bounce(points,lines)
+        if self.hit_wall(points,lines):
+            self.owner.bullets += 1
+            self.effect_time = -1
+            return
     def getCorner(self,center:complex,sign1,sign2):
         return [(center+sign1*HW+sign2*HW,center+sign1*(HW+SQSIZE)+sign2*HW),(center+sign1*HW+sign2*HW,center+sign1*HW+sign2*(HW+SQSIZE))]
-    def bounce(self,points:tuple,lines:tuple):
-        flag = False
+    def hit_wall(self,points:tuple,lines:tuple):
         for line in lines:
             x1,y1 = c2t(line[0])
             x2,y2 = c2t(line[1])
             if x1 == x2:
-                #与纵向墙相撞
                 if abs(self.position.real-x1) <= self.R and min(y1,y2) <= self.position.imag <= max(y1,y2):
-                    self.angle = (pi - self.angle) % (2 * pi)
-                    flag = True
+                    return True
             else:
-                #与横向墙相撞
                 if abs(self.position.imag-y1) <= self.R and min(x1,x2) <= self.position.real <= max(x1,x2):
-                    self.angle = (2 * pi - self.angle)
-                    flag = True
-        #如果未与横纵向墙相撞，分析与墙角(点)相撞的情形
-        if not flag:
-            #pangle是update函数传入的参数，表示出子弹若与墙角(点)相撞时，其方向应与何对称轴对称
-            for point,pangle in points:
-                if abs(self.position - point) <= self.R:
-                    self.position = point + complex(self.R*cos(pangle)*(2**0.5),self.R*sin(pangle)*(2**0.5))
-                    self.angle = (2 * pangle - self.angle + pi) % (2*pi)
+                    return True
+        for point,_ in points:
+            if abs(self.position - point) <= self.R:
+                return True
+        return False
 
