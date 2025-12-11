@@ -11,8 +11,9 @@ import os
 # os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 class TankGame:
-    def __init__(self, render_mode=False):
+    def __init__(self, render_mode=False, num_players=2):
         self.render_mode = render_mode
+        self.num_players = num_players
         pygame.init()
         
         self.fps = propreties.data["fps"]
@@ -26,9 +27,12 @@ class TankGame:
             self.screen = pygame.Surface((self.width, self.height)) # Off-screen surface
 
         self.gene = make_generator()
-        self.p1 = player.Player((255, 0, 0))
-        self.p2 = player.Player((0, 255, 0))
-        self.players = [self.p1, self.p2]
+        # Initialize players with random colors
+        self.players = []
+        for _ in range(num_players):
+            color = (randint(50, 255), randint(50, 255), randint(50, 255))
+            self.players.append(player.Player(color))
+            
         self.effect_bullets = []
         self.game_map = None
         self.count = 0
@@ -46,21 +50,18 @@ class TankGame:
         self.game_map = Map(walls, self.screen, cols, rows, startx, starty)
         
         # Reset players
-        # Ensure they don't spawn too close? The original code just randomizes.
-        self.p1.newgame(complex(randint(0, cols-1)*SQSIZE+70+startx, randint(0, rows-1)*SQSIZE+70+starty), random()*2*pi)
-        self.p2.newgame(complex(randint(0, cols-1)*SQSIZE+70+startx, randint(0, rows-1)*SQSIZE+70+starty), random()*2*pi)
+        for ply in self.players:
+            pos = complex(randint(0, cols-1)*SQSIZE+70+startx, randint(0, rows-1)*SQSIZE+70+starty)
+            angle = random()*2*pi
+            ply.newgame(pos, angle)
         
         self.current_step = 0
-        return self.get_state(0), self.get_state(1)
+        return [self.get_state(i) for i in range(self.num_players)]
 
-    def step(self, action1, action2):
-        # Actions: [move, turn, shoot]
-        # move: -1 to 1 (back/forward)
-        # turn: -1 to 1 (left/right)
-        # shoot: > 0.5 shoot
+    def step(self, actions):
+        # Actions: List of [move, turn, shoot] for each player
         
-        actions = [action1, action2]
-        rewards = [0, 0]
+        rewards = [0] * self.num_players
         
         for i, ply in enumerate(self.players):
             if ply.lives <= 0: continue
@@ -82,7 +83,7 @@ class TankGame:
                 newb = ply.add_bullet()
                 if newb:
                     self.effect_bullets.append(newb)
-                    rewards[i] -= 0.1 # Small penalty for shooting to prevent spamming
+                    rewards[i] -= 0.002 # Very small penalty for shooting
         
         # Update game state
         alive_players = []
@@ -91,10 +92,6 @@ class TankGame:
         for b in self.effect_bullets.copy():
             if b.is_effect():
                 # Check if bullet hit anyone
-                # The original update method handles hitting players and reducing lives
-                # But we need to know WHO got hit to assign rewards
-                
-                # We need to intercept the hit logic or check lives before/after
                 prev_lives = [p.lives for p in self.players]
                 b.update(self.game_map, tuple(self.players))
                 
@@ -102,33 +99,37 @@ class TankGame:
                 for i, p in enumerate(self.players):
                     if p.lives < prev_lives[i]:
                         # Player i got hit
-                        rewards[i] -= 100 # Penalty for getting hit
+                        rewards[i] -= 0.5 # Penalty for getting hit
                         # Reward the shooter
-                        if b.owner == self.players[1-i]:
-                            rewards[1-i] += 100
+                        for j, shooter in enumerate(self.players):
+                            if b.owner == shooter:
+                                rewards[j] += 1.0 # Reward for hitting enemy
+                                break
             else:
                 self.effect_bullets.remove(b)
 
         # Update players
-        for ply in self.players:
+        for i, ply in enumerate(self.players):
             if ply.lives > 0:
                 alive_players.append(ply)
                 ply.update(self.game_map)
+                # Time penalty to encourage finishing the game
+                rewards[i] -= 0.001
         
         self.current_step += 1
         
         done = False
         if len(alive_players) <= 1 or self.current_step >= self.max_steps:
             done = True
-            # Survival reward?
-            # Maybe not needed if we have win/loss rewards
+            # Win reward
+            if len(alive_players) == 1:
+                winner = alive_players[0]
+                for i, p in enumerate(self.players):
+                    if p == winner:
+                        rewards[i] += 1.0 # Bonus for winning
+                        break
         
-        # Small survival reward
-        for i in range(2):
-            if self.players[i].lives > 0:
-                rewards[i] += 0.1
-
-        return self.get_state(0), self.get_state(1), rewards, done
+        return [self.get_state(i) for i in range(self.num_players)], rewards, done
 
     def render(self):
         if not self.render_mode: return
@@ -148,7 +149,6 @@ class TankGame:
     def get_state(self, player_idx):
         # Construct feature vector
         me = self.players[player_idx]
-        enemy = self.players[1 - player_idx]
         
         if me.lives <= 0:
             return np.zeros(28) # Dead state
@@ -165,15 +165,21 @@ class TankGame:
             math.cos(me.angle)
         ]
         
-        # 2. Enemy State (4)
-        # Relative position might be better
-        rel_pos = enemy.position - me.position
-        state.extend([
-            rel_pos.real / norm_x,
-            rel_pos.imag / norm_y,
-            math.sin(enemy.angle),
-            math.cos(enemy.angle)
-        ])
+        # 2. Enemy State (4) - Nearest Enemy
+        others = [p for i, p in enumerate(self.players) if i != player_idx and p.lives > 0]
+        if others:
+            # Find nearest
+            nearest = min(others, key=lambda p: abs(p.position - me.position))
+            rel_pos = nearest.position - me.position
+            state.extend([
+                rel_pos.real / norm_x,
+                rel_pos.imag / norm_y,
+                math.sin(nearest.angle),
+                math.cos(nearest.angle)
+            ])
+        else:
+            # No enemies (won or alone)
+            state.extend([0, 0, 0, 0])
         
         # 3. Bullets (3 closest) (3 * 4 = 12)
         bullets_info = []

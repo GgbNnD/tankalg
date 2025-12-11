@@ -12,6 +12,7 @@ def train(resume_path=None, log_file="training_log.csv"):
     POPULATION_SIZE = 50
     GENERATIONS = 100
     GAMES_PER_GEN = 5 # Each AI plays this many games
+    NUM_PLAYERS = 4 # Number of tanks in one game
     
     INPUT_SIZE = 28
     HIDDEN_SIZE = 64
@@ -47,7 +48,7 @@ def train(resume_path=None, log_file="training_log.csv"):
         else:
             print(f"Checkpoint {resume_path} not found. Starting from scratch.")
 
-    env = TankGame(render_mode=False)
+    env = TankGame(render_mode=False, num_players=NUM_PLAYERS)
     
     # Initialize log file
     if not os.path.exists(log_file):
@@ -65,29 +66,33 @@ def train(resume_path=None, log_file="training_log.csv"):
         for i in range(POPULATION_SIZE):
             total_reward = 0
             for _ in range(GAMES_PER_GEN):
-                # Pick random opponent
-                opponent_idx = np.random.randint(POPULATION_SIZE)
-                while opponent_idx == i:
-                    opponent_idx = np.random.randint(POPULATION_SIZE)
+                # Pick random opponents
+                # We need to pick NUM_PLAYERS - 1 opponents
+                opponents_indices = []
+                while len(opponents_indices) < NUM_PLAYERS - 1:
+                    idx = np.random.randint(POPULATION_SIZE)
+                    if idx != i and idx not in opponents_indices:
+                        opponents_indices.append(idx)
                 
                 # Play game
-                p1_net = ga.population[i]
-                p2_net = ga.population[opponent_idx]
+                # Current player is at index 0 in the game
+                player_indices = [i] + opponents_indices
+                nets = [ga.population[idx] for idx in player_indices]
                 
-                state1, state2 = env.reset()
+                states = env.reset()
                 done = False
                 game_reward = 0
                 
                 while not done:
                     # Get actions
-                    action1 = p1_net.forward(state1)
-                    action2 = p2_net.forward(state2)
+                    actions = [net.forward(state) for net, state in zip(nets, states)]
                     
                     # Step
-                    next_state1, next_state2, rewards, done = env.step(action1, action2)
+                    next_states, rewards, done = env.step(actions)
                     
+                    # Accumulate reward for the current player (index 0)
                     game_reward += rewards[0]
-                    state1, state2 = next_state1, next_state2
+                    states = next_states
                 
                 total_reward += game_reward
             
@@ -119,6 +124,7 @@ def watch_game(model_path="best_ai_final.pkl"):
     INPUT_SIZE = 28
     HIDDEN_SIZE = 64
     OUTPUT_SIZE = 3
+    NUM_PLAYERS = 4
     
     ga = GeneticAlgorithm(2, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
     try:
@@ -127,14 +133,13 @@ def watch_game(model_path="best_ai_final.pkl"):
     except:
         print("Could not load model, using random weights")
     
-    # Use the same model for both players
-    p1_net = ga.population[0]
-    p2_net = ga.population[0] # Self-play
+    # Use the same model for all players
+    nets = [ga.population[0] for _ in range(NUM_PLAYERS)]
     
-    env = TankGame(render_mode=True)
+    env = TankGame(render_mode=True, num_players=NUM_PLAYERS)
     
     while True:
-        state1, state2 = env.reset()
+        states = env.reset()
         done = False
         
         while not done:
@@ -142,10 +147,9 @@ def watch_game(model_path="best_ai_final.pkl"):
                 if event.type == pygame.QUIT:
                     return
             
-            action1 = p1_net.forward(state1)
-            action2 = p2_net.forward(state2)
+            actions = [net.forward(state) for net, state in zip(nets, states)]
             
-            state1, state2, rewards, done = env.step(action1, action2)
+            states, rewards, done = env.step(actions)
             env.render()
             env.timer.tick(60) # Limit FPS for watching
 
