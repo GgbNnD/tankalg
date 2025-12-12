@@ -6,13 +6,14 @@ import os
 import pygame
 import argparse
 import csv
+from tqdm import tqdm
 
 def train(resume_path=None, log_file="training_log.csv"):
     # Hyperparameters
     POPULATION_SIZE = 50
     GENERATIONS = 200
     GAMES_PER_GEN = 5 # Each AI plays this many games
-    NUM_PLAYERS = 4 # Number of tanks in one game
+    NUM_PLAYERS = 8 # Number of tanks in one game
     
     INPUT_SIZE = 28
     HIDDEN_SIZE = 64
@@ -62,26 +63,33 @@ def train(resume_path=None, log_file="training_log.csv"):
         fitness_scores = np.zeros(POPULATION_SIZE)
         
         # Evaluate population
-        # Each individual plays against random opponents
-        for i in range(POPULATION_SIZE):
-            total_reward = 0
-            for _ in range(GAMES_PER_GEN):
-                # Pick random opponents
-                # We need to pick NUM_PLAYERS - 1 opponents
-                opponents_indices = []
-                while len(opponents_indices) < NUM_PLAYERS - 1:
-                    idx = np.random.randint(POPULATION_SIZE)
-                    if idx != i and idx not in opponents_indices:
-                        opponents_indices.append(idx)
+        games_played = np.zeros(POPULATION_SIZE)
+        total_rewards = np.zeros(POPULATION_SIZE)
+        
+        # Estimate total matches needed
+        total_matches_needed = int(np.ceil(POPULATION_SIZE * GAMES_PER_GEN / NUM_PLAYERS))
+        
+        with tqdm(total=total_matches_needed, desc=f"Gen {gen}", unit="game") as pbar:
+            # Continue playing until everyone has played at least GAMES_PER_GEN games
+            while np.min(games_played) < GAMES_PER_GEN:
+                # Prioritize those who haven't played enough
+                candidates = [i for i in range(POPULATION_SIZE) if games_played[i] < GAMES_PER_GEN]
                 
+                if len(candidates) >= NUM_PLAYERS:
+                    player_indices = np.random.choice(candidates, NUM_PLAYERS, replace=False)
+                else:
+                    # Not enough candidates, fill with others
+                    others = [i for i in range(POPULATION_SIZE) if i not in candidates]
+                    fillers = np.random.choice(others, NUM_PLAYERS - len(candidates), replace=False)
+                    player_indices = np.concatenate([candidates, fillers])
+                    player_indices = player_indices.astype(int)
+
                 # Play game
-                # Current player is at index 0 in the game
-                player_indices = [i] + opponents_indices
                 nets = [ga.population[idx] for idx in player_indices]
                 
                 states = env.reset()
                 done = False
-                game_reward = 0
+                game_rewards = np.zeros(NUM_PLAYERS)
                 
                 while not done:
                     # Get actions
@@ -90,13 +98,18 @@ def train(resume_path=None, log_file="training_log.csv"):
                     # Step
                     next_states, rewards, done = env.step(actions)
                     
-                    # Accumulate reward for the current player (index 0)
-                    game_reward += rewards[0]
+                    # Accumulate reward
+                    game_rewards += rewards
                     states = next_states
                 
-                total_reward += game_reward
+                # Update stats for all players in this game
+                for idx_in_game, population_idx in enumerate(player_indices):
+                    total_rewards[population_idx] += game_rewards[idx_in_game]
+                    games_played[population_idx] += 1
+                
+                pbar.update(1)
             
-            fitness_scores[i] = total_reward / GAMES_PER_GEN
+        fitness_scores = total_rewards / games_played
         
         # Stats
         best_fitness = np.max(fitness_scores)
