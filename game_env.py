@@ -32,26 +32,58 @@ class TankGame:
         for _ in range(num_players):
             color = (randint(50, 255), randint(50, 255), randint(50, 255))
             self.players.append(player.Player(color))
+        
+        # Initialize static enemy
+        self.enemy = player.Player((255, 0, 0)) # Red enemy
             
         self.effect_bullets = []
         self.game_map = None
         self.count = 0
-        self.max_steps = 2000 # Limit game length
+        # Limit game length to 60 seconds (60 * fps)
+        self.max_steps = 100 * self.fps
         self.current_step = 0
-
-    def reset(self):
-        self.effect_bullets.clear()
-        cols = randint(propreties.data["mincols"], propreties.data["maxcols"])
-        rows = randint(propreties.data["minrows"], propreties.data["maxrows"])
+        
+        # Generate fixed map for training
+        cols = 10
+        rows = 6
         startx = (propreties.data["maxcols"] - cols) * SQSIZE // 2
         starty = (propreties.data["maxrows"] - rows) * SQSIZE // 2
         
-        walls = self.gene.send((cols, rows))
+        # Simple map with one wall in the middle
+        walls = []
+        # Boundaries
+        for c in range(cols):
+            walls.append((c, 0, -1))      # Top
+            walls.append((c, rows, -1))   # Bottom
+        for r in range(rows):
+            walls.append((0, r, 1))       # Left
+            walls.append((cols, r, 1))    # Right
+            
+        # Internal wall (Middle)
+        walls.append((cols//2, rows//2, 1)) # Vertical wall in center
+
+        # Bunker around enemy at (0,0)
+        # Protects enemy from direct fire but leaves an opening
+        walls.append((1, 0, 1))   # Vertical wall right of (0,0)
+        walls.append((0, 2, -1))  # Horizontal wall bottom of (0,1)
+
+        self.fixed_map_data = (walls, cols, rows, startx, starty)
+        self.finished_players = []
+
+    def reset(self):
+        self.effect_bullets.clear()
+        self.finished_players = [False] * self.num_players
+        walls, cols, rows, startx, starty = self.fixed_map_data
         self.game_map = Map(walls, self.screen, cols, rows, startx, starty)
         
-        # Reset players
+        # Reset enemy (Static at top-left)
+        enemy_pos = complex(0*SQSIZE+70+startx, 0*SQSIZE+70+starty)
+        self.enemy.newgame(enemy_pos, 0)
+        self.enemy.lives = 1
+        
+        # Reset players (Start at bottom-right)
         for ply in self.players:
-            pos = complex(randint(0, cols-1)*SQSIZE+70+startx, randint(0, rows-1)*SQSIZE+70+starty)
+            pos = complex((cols-1)*SQSIZE+70+startx, (rows-1)*SQSIZE+70+starty)
             angle = random()*2*pi
             ply.newgame(pos, angle)
         
@@ -64,6 +96,7 @@ class TankGame:
         rewards = [0] * self.num_players
         
         for i, ply in enumerate(self.players):
+            if self.finished_players[i]: continue # Skip finished players
             if ply.lives <= 0: continue
             
             act = actions[i]
@@ -85,49 +118,62 @@ class TankGame:
                     self.effect_bullets.append(newb)
                     rewards[i] -= 0.002 # Very small penalty for shooting
         
-        # Update game state
-        alive_players = []
-        
         # Update bullets
         for b in self.effect_bullets.copy():
             if b.is_effect():
-                # Check if bullet hit anyone
-                prev_lives = [p.lives for p in self.players]
-                b.update(self.game_map, tuple(self.players))
+                # Check if bullet hit enemy
+                # We use a copy of enemy to check collision without killing it for everyone
+                # Actually, bullet.update modifies the target's lives.
+                # We need to reset enemy lives after check or use a dummy.
                 
-                # Check for hits
-                for i, p in enumerate(self.players):
-                    if p.lives < prev_lives[i]:
-                        # Player i got hit
-                        rewards[i] -= 0.5 # Penalty for getting hit
-                        # Reward the shooter
-                        for j, shooter in enumerate(self.players):
-                            if b.owner == shooter:
-                                rewards[j] += 1.0 # Reward for hitting enemy
-                                break
+                # Hack: Reset enemy lives before each check if we want it to survive?
+                # No, bullet.update takes a tuple of players.
+                # If we pass (self.enemy,), it modifies self.enemy.
+                
+                # Let's save enemy lives
+                prev_lives = self.enemy.lives
+                b.update(self.game_map, (self.enemy,))
+                
+                if self.enemy.lives < prev_lives:
+                    # Enemy hit!
+                    # Restore enemy lives so others can kill it too
+                    self.enemy.lives = prev_lives
+                    
+                    # Find owner
+                    for i, ply in enumerate(self.players):
+                        if b.owner == ply and not self.finished_players[i]:
+                            rewards[i] += 100.0 # Big reward for killing enemy
+                            self.finished_players[i] = True
+                            break
+                    
+                    # Remove bullet
+                    if b in self.effect_bullets:
+                        self.effect_bullets.remove(b)
             else:
                 self.effect_bullets.remove(b)
 
         # Update players
         for i, ply in enumerate(self.players):
-            if ply.lives > 0:
-                alive_players.append(ply)
+            if not self.finished_players[i] and ply.lives > 0:
+                # Calculate distance before move
+                dist_before = abs(ply.position - self.enemy.position)
+                
                 ply.update(self.game_map)
+                
+                # Calculate distance after move
+                dist_after = abs(ply.position - self.enemy.position)
+                
+                # Reward for getting closer (Distance Shaping)
+                # Scale: Moving 1 pixel closer gives 0.05 reward
+                # rewards[i] += (dist_before - dist_after) * 0.05
+                
                 # Time penalty to encourage finishing the game
-                rewards[i] -= 0.001
+                rewards[i] -= 0.03
         
         self.current_step += 1
         
-        done = False
-        if len(alive_players) <= 1 or self.current_step >= self.max_steps:
-            done = True
-            # Win reward
-            if len(alive_players) == 1:
-                winner = alive_players[0]
-                for i, p in enumerate(self.players):
-                    if p == winner:
-                        rewards[i] += 1.0 # Bonus for winning
-                        break
+        # Done if all players finished or timeout
+        done = all(self.finished_players) or self.current_step >= self.max_steps
         
         return [self.get_state(i) for i in range(self.num_players)], rewards, done
 
@@ -139,6 +185,10 @@ class TankGame:
         for b in self.effect_bullets:
             b.draw(self.screen)
             
+        # Draw enemy
+        if self.enemy.lives > 0:
+            self.enemy.draw(self.screen)
+            
         for ply in self.players:
             if ply.lives > 0:
                 ply.draw(self.screen)
@@ -147,11 +197,15 @@ class TankGame:
         pygame.display.update()
 
     def get_state(self, player_idx):
+        # If finished, return zeros (or last state, but zeros is fine as they don't act)
+        if self.finished_players[player_idx]:
+            return np.zeros(16)
+
         # Construct feature vector
         me = self.players[player_idx]
         
         if me.lives <= 0:
-            return np.zeros(28) # Dead state
+            return np.zeros(16) # Dead state
             
         # Normalize positions
         norm_x = self.width
@@ -165,45 +219,20 @@ class TankGame:
             math.cos(me.angle)
         ]
         
-        # 2. Enemy State (4) - Nearest Enemy
-        others = [p for i, p in enumerate(self.players) if i != player_idx and p.lives > 0]
-        if others:
-            # Find nearest
-            nearest = min(others, key=lambda p: abs(p.position - me.position))
-            rel_pos = nearest.position - me.position
+        # 2. Enemy State (4) - Static Enemy
+        if self.enemy.lives > 0:
+            rel_pos = self.enemy.position - me.position
             state.extend([
                 rel_pos.real / norm_x,
                 rel_pos.imag / norm_y,
-                math.sin(nearest.angle),
-                math.cos(nearest.angle)
+                math.sin(self.enemy.angle),
+                math.cos(self.enemy.angle)
             ])
         else:
-            # No enemies (won or alone)
+            # Enemy dead
             state.extend([0, 0, 0, 0])
         
-        # 3. Bullets (3 closest from other players) (3 * 4 = 12)
-        bullets_info = []
-        for b in self.effect_bullets:
-            if not b.is_effect():
-                continue
-            if b.owner is me:
-                continue
-            d = abs(b.position - me.position)
-            # Relative pos and velocity
-            rel_b = b.position - me.position
-            vx = math.cos(b.angle)
-            vy = math.sin(b.angle)
-            bullets_info.append((d, rel_b.real/norm_x, rel_b.imag/norm_y, vx, vy))
-            
-        bullets_info.sort(key=lambda x: x[0])
-        
-        for i in range(3):
-            if i < len(bullets_info):
-                state.extend(bullets_info[i][1:])
-            else:
-                state.extend([0, 0, 0, 0])
-                
-        # 4. Wall Raycasts (8 directions) (8)
+        # 3. Wall Raycasts (8 directions) (8)
         rays = self.cast_rays(me.position, me.angle)
         state.extend(rays)
         

@@ -12,10 +12,10 @@ def train(resume_path=None, log_file="training_log.csv"):
     # Hyperparameters
     POPULATION_SIZE = 50
     GENERATIONS = 200
-    GAMES_PER_GEN = 5 # Each AI plays this many games
-    NUM_PLAYERS = 8 # Number of tanks in one game
+    GAMES_PER_GEN = 1 # Deterministic environment, one game is enough
+    NUM_PLAYERS = 50 # Train all agents in parallel
     
-    INPUT_SIZE = 28
+    INPUT_SIZE = 16 # Reduced input size
     HIDDEN_SIZE = 64
     OUTPUT_SIZE = 3
     
@@ -134,10 +134,10 @@ def train(resume_path=None, log_file="training_log.csv"):
 
 def watch_game(model_path="best_ai_final.pkl"):
     # Watch two AIs play
-    INPUT_SIZE = 28
+    INPUT_SIZE = 16
     HIDDEN_SIZE = 64
     OUTPUT_SIZE = 3
-    NUM_PLAYERS = 4
+    NUM_PLAYERS = 50
     
     ga = GeneticAlgorithm(2, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
     try:
