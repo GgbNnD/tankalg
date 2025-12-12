@@ -66,33 +66,38 @@ def Generage_Maze(arena, x, y, x_, y_):
     Generage_Maze(arena, x, v+1, u, y_)
     Generage_Maze(arena, u+1, v+1, x_, y_)
 
+    # 保证每次分割至少有一个开口以保持联通性，
+    # 同时使用较高的拆墙概率以减少整体墙体，得到更稀疏的迷宫。
     choose = [1, 1, 1, 1]
-    choose[random.randint(0, 3)] = 0
-    randfix = random.uniform(0.8, 1)
+    choose[random.randint(0, 3)] = 0  # 强制在一个方向打开
+    # 提高拆墙概率以进一步减少整体墙体，使迷宫更稀疏
+    # 90%~99.5% 的概率拆墙（更稀疏）
+    randfix = random.uniform(0.9, 0.995)
 
-    if choose[0] or random.random() < randfix:
+    # 下方边界
+    if choose[0] == 0 or random.random() < randfix:
         p = random.randint(x, u)
         for wall in arena.cells[get_idx(p, v)].walls:
             if wall.type == C.BOTTOM:
                 wall.kill()
 
-    if choose[1] or random.random() < randfix:
+    # 右侧边界
+    if choose[1] == 0 or random.random() < randfix:
         p = random.randint(y, v)
-        arena.cells[get_idx(u, p)]
         for wall in arena.cells[get_idx(u, p)].walls:
             if wall.type == C.RIGHT:
                 wall.kill()
 
-    if choose[2] or random.random() < randfix:
+    # 下方右半部分
+    if choose[2] == 0 or random.random() < randfix:
         p = random.randint(u+1, x_)
-        arena.cells[get_idx(p, v)]
         for wall in arena.cells[get_idx(p, v)].walls:
             if wall.type == C.BOTTOM:
                 wall.kill()
 
-    if choose[3] or random.random() < randfix:
+    # 右侧下半部分
+    if choose[3] == 0 or random.random() < randfix:
         p = random.randint(v+1, y_)
-        arena.cells[get_idx(u, p)]
         for wall in arena.cells[get_idx(u, p)].walls:
             if wall.type == C.RIGHT:
                 wall.kill()

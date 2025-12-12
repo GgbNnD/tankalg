@@ -4,11 +4,14 @@ import torch.optim as optim
 import numpy as np
 from torch.distributions import Categorical
 
+import torch.backends.cudnn as cudnn
+
 # 自动检测设备：优先使用 GPU (CUDA)
 print(f"PyTorch Version: {torch.__version__}")
 print(f"CUDA Available: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
+    cudnn.benchmark = True # 针对固定输入大小优化，提升训练速度
     print(f"PPO Agent using device: {device} ({torch.cuda.get_device_name(0)})")
 else:
     device = torch.device("cpu")
@@ -18,14 +21,15 @@ else:
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorCritic, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
+        # 增大网络规模以利用 GPU 并提升拟合能力
+        self.fc1 = nn.Linear(state_dim, 256)
+        self.fc2 = nn.Linear(256, 256)
         
         # Actor head
-        self.actor = nn.Linear(128, action_dim)
+        self.actor = nn.Linear(256, action_dim)
         
         # Critic head
-        self.critic = nn.Linear(128, 1)
+        self.critic = nn.Linear(256, 1)
         
     def forward(self, x):
         x = torch.relu(self.fc1(x))

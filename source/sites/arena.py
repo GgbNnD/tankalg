@@ -1,5 +1,6 @@
 import pygame
 import random
+import numpy as np
 from ..parts import player, cell, generate_maze, supply
 from .. import tools, setup, constants as C
 
@@ -10,6 +11,9 @@ class Arena:
         self.player_num = player_num
         self.score = score
         self.next = 'arena'
+        # 固定随机种子以保证场景可复现（训练期间使用固定场景便于调试）
+        random.seed(12345)
+        np.random.seed(12345)
         self.random = random.random()
 
         self.setup_states()
@@ -93,6 +97,8 @@ class Arena:
                     if too_close:
                         attempts += 1
                         continue
+
+                    # 允许随机出生：不再跳过被4面墙包围的格子（出生位置随机）
                         
                     valid_pos = True
                     vised[idx] = True
@@ -182,6 +188,7 @@ class Arena:
                 if hitbox:
                     setup.SOUNDS['pick'].play()
                     asupply.kill()
+                    self.push_event({'type': 'get_supply', 'player': player.name})
                     self.supply_num -= 1
                     self.supply_timer = self.clock
                     if asupply.type:
