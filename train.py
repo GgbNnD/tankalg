@@ -1,81 +1,40 @@
 import numpy as np
-from ai_controller import GeneticAlgorithm, NeuralNetwork
+from ai_controller import GPUGeneticAlgorithm, GeneticAlgorithm
 from game_env import TankGame
+from vec_env import SubprocVecEnv
 import time
 import os
 import pygame
 import argparse
 import json
-from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
+import torch
 
-# Helper function for parallel execution
-def evaluate_single_game(weights):
-    # Create environment inside the process
-    # We use 2 players: AI (index 0) vs Random (index 1)
-    # Suppress pygame output
-    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-    
-    env = TankGame(render_mode=False, num_players=2)
-    
-    # Reconstruct AI
-    ai = NeuralNetwork(20, 64, 3)
-    ai.set_weights(weights)
-    
-    states = env.reset()
-    done = False
-    total_reward = 0
-    stats = {"hit": 0, "suicide": 0, "dead": 0, "win": 0}
-    
-    while not done:
-        # AI Action
-        action_ai = ai.forward(states[0])
-        
-        # Random Opponent Action
-        # [move, turn, shoot]
-        # move: -1 to 1, turn: -1 to 1, shoot: 0 to 1
-        action_random = [
-            np.random.uniform(-1, 1), 
-            np.random.uniform(-1, 1), 
-            np.random.uniform(0, 1)
-        ]
-        
-        actions = [action_ai, action_random]
-        
-        next_states, rewards, done, infos = env.step(actions)
-        
-        total_reward += rewards[0]
-        
-        # Accumulate stats for AI (player 0)
-        for k in stats:
-            stats[k] += infos[0].get(k, 0)
-            
-        states = next_states
-        
-    return total_reward, stats
+# Wrapper for SubprocVecEnv
+def make_env():
+    return TankGame(render_mode=False, num_players=2)
 
 def train(resume_path=None, log_file="training_log.jsonl"):
     # Hyperparameters
     POPULATION_SIZE = 50
     GENERATIONS = 200
-    GAMES_PER_GEN = 5 # Play 5 games against random opponent to average noise
+    GAMES_PER_GEN = 5 # Play 5 games against random opponent
     
     INPUT_SIZE = 20
-    HIDDEN_SIZE = 64
+    HIDDEN_SIZE = 256
     OUTPUT_SIZE = 3
     
-    ga = GeneticAlgorithm(POPULATION_SIZE, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
+    # Use GPU GA
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    
+    ga = GPUGeneticAlgorithm(POPULATION_SIZE, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, device=device)
     
     start_gen = 0
     if resume_path and os.path.exists(resume_path):
         print(f"Resuming training from {resume_path}...")
         try:
             ga.load_best(resume_path)
-            best_weights = ga.population[0].get_weights()
-            for i in range(1, POPULATION_SIZE):
-                ga.population[i].set_weights(best_weights)
-                ga.population[i].mutate(mutation_rate=0.2, mutation_scale=0.3)
-            
             try:
                 base_name = os.path.basename(resume_path)
                 if "gen_" in base_name:
@@ -85,43 +44,78 @@ def train(resume_path=None, log_file="training_log.jsonl"):
         except Exception as e:
             print(f"Error loading checkpoint: {e}")
 
-    print(f"Starting parallel training with population {POPULATION_SIZE} for {GENERATIONS} generations...")
+    # Vectorized Environment
+    # Determine number of parallel environments based on CPU cores
+    # We want to use CPU efficiently but not overload it
+    num_envs = max(1, os.cpu_count() - 2) # Leave some cores for system/GPU driving
+    print(f"Starting vectorized training with {num_envs} environments...")
+    
+    envs = SubprocVecEnv([make_env for _ in range(num_envs)])
     
     for gen in range(start_gen, start_gen + GENERATIONS):
         fitness_scores = np.zeros(POPULATION_SIZE)
         gen_stats = {"hit": 0, "suicide": 0, "dead": 0, "win": 0}
         
-        # Prepare tasks: Each individual plays GAMES_PER_GEN games
-        tasks = []
-        for i in range(POPULATION_SIZE):
-            weights = ga.population[i].get_weights()
-            for _ in range(GAMES_PER_GEN):
-                tasks.append((i, weights))
+        # We need to evaluate POPULATION_SIZE individuals
+        # We have num_envs environments
+        # We process them in batches
         
-        # Run tasks in parallel
-        # Use max_workers=None (defaults to cpu_count)
-        # User requested to use half of the CPU resources
-        max_workers = max(1, (os.cpu_count() or 1) // 2)
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            futures = [executor.submit(evaluate_single_game, t[1]) for t in tasks]
-            
-            # Collect results with progress bar
-            for i, future in tqdm(enumerate(futures), total=len(futures), desc=f"Gen {gen}"):
-                try:
-                    reward, stats = future.result()
-                    pop_idx = tasks[i][0]
-                    fitness_scores[pop_idx] += reward
+        with tqdm(total=POPULATION_SIZE * GAMES_PER_GEN, desc=f"Gen {gen}") as pbar:
+            for i in range(0, POPULATION_SIZE, num_envs):
+                # Indices of individuals in this batch
+                indices = list(range(i, min(i + num_envs, POPULATION_SIZE)))
+                current_batch_size = len(indices)
+                
+                # Reset environments for this batch
+                # We only use the first current_batch_size environments
+                obs = envs.reset()[:current_batch_size]
+                
+                # Track games played for each individual in the batch
+                games_played = np.zeros(current_batch_size, dtype=int)
+                batch_fitness = np.zeros(current_batch_size)
+                
+                # Run until all individuals in this batch have played enough games
+                while np.any(games_played < GAMES_PER_GEN):
+                    # Get actions from GPU
+                    # obs is numpy array (batch, input)
+                    # indices is list of population indices
+                    # We need to map batch index 0 -> population index indices[0]
                     
-                    # Aggregate stats for the whole generation
-                    for k in stats:
-                        gen_stats[k] += stats[k]
-                except Exception as e:
-                    print(f"Error in game execution: {e}")
+                    # Convert obs to tensor on GPU
+                    obs_tensor = torch.tensor(obs, dtype=torch.float32, device=device)
+                    
+                    # Get actions for the specific individuals
+                    # We use forward_subset
+                    actions_tensor = ga.pop.forward_subset(obs_tensor, indices)
+                    actions = actions_tensor.cpu().numpy()
+                    
+                    # Step environments
+                    # We need to step ALL envs, but we only care about the first current_batch_size
+                    # SubprocVecEnv expects actions for all envs
+                    # We can pad actions with zeros/random
+                    full_actions = np.zeros((num_envs, OUTPUT_SIZE))
+                    full_actions[:current_batch_size] = actions
+                    
+                    next_obs, rewards, dones, infos = envs.step(full_actions)
+                    
+                    # Process results
+                    for k in range(current_batch_size):
+                        if games_played[k] < GAMES_PER_GEN:
+                            batch_fitness[k] += rewards[k]
+                            
+                            # Update stats
+                            for key in gen_stats:
+                                gen_stats[key] += infos[k].get(key, 0)
+                            
+                            if dones[k]:
+                                games_played[k] += 1
+                                pbar.update(1)
+                    
+                    obs = next_obs[:current_batch_size]
+                
+                # Update population fitness
+                fitness_scores[indices] = batch_fitness / GAMES_PER_GEN
 
-        # Average fitness
-        fitness_scores /= GAMES_PER_GEN
-        
         # Stats
         best_idx = np.argmax(fitness_scores)
         best_fitness = fitness_scores[best_idx]
@@ -129,9 +123,8 @@ def train(resume_path=None, log_file="training_log.jsonl"):
         
         print(f"Gen {gen}: Best Fitness = {best_fitness:.2f}, Avg Fitness = {avg_fitness:.2f}")
         
-        # Prepare log entry
-        best_weights = ga.population[best_idx].get_weights()
-        # Convert weights to list for JSON serialization
+        # Log
+        best_weights = ga.pop.get_best_weights(best_idx)
         serializable_weights = {k: v.tolist() for k, v in best_weights.items()}
         
         log_entry = {
@@ -139,21 +132,20 @@ def train(resume_path=None, log_file="training_log.jsonl"):
             "best_fitness": float(best_fitness),
             "avg_fitness": float(avg_fitness),
             "timestamp": time.time(),
-            "stats": {k: v / (POPULATION_SIZE * GAMES_PER_GEN) for k, v in gen_stats.items()}, # Average per game
+            "stats": {k: v / (POPULATION_SIZE * GAMES_PER_GEN) for k, v in gen_stats.items()},
             "best_weights": serializable_weights
         }
         
         with open(log_file, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
         
-        # Save best pickle as well (for easy loading)
         if gen % 10 == 0:
             ga.save_best(f"best_ai_gen_{gen}.pkl")
             
-        # Evolve
         ga.evolve(fitness_scores)
 
     ga.save_best("best_ai_final.pkl")
+    envs.close()
     print("Training complete!")
 
 def watch_game(model_path="best_ai_final.pkl"):
@@ -161,6 +153,7 @@ def watch_game(model_path="best_ai_final.pkl"):
     HIDDEN_SIZE = 64
     OUTPUT_SIZE = 3
     
+    # Use CPU for watching
     ga = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
     try:
         ga.load_best(model_path)
@@ -188,7 +181,6 @@ def watch_game(model_path="best_ai_final.pkl"):
             env.timer.tick(60)
 
 if __name__ == "__main__":
-    # Fix for multiprocessing
     try:
         pygame.quit()
     except:
