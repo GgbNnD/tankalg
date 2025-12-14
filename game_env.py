@@ -77,21 +77,22 @@ class TankGame:
         walls, cols, rows, startx, starty = self.fixed_map_data
         self.game_map = Map(walls, self.screen, cols, rows, startx, starty)
         
-        # Reset players
-        # P1: Top-Left (0, 0)
-        # P2: Bottom-Right (5, 3)
-        spawn_positions = [
-            complex((0)*SQSIZE+70+startx, (0)*SQSIZE+70+starty),
-            complex((5)*SQSIZE+70+startx, (3)*SQSIZE+70+starty)
-        ]
+        # Randomize spawn positions to improve generalization
+        # Create a list of all possible grid coordinates
+        possible_spawns = [(c, r) for c in range(cols) for r in range(rows)]
         
+        # Select unique random positions for each player
+        # Ensure we don't pick the same spot for multiple players
+        if len(possible_spawns) >= self.num_players:
+            selected_indices = np.random.choice(len(possible_spawns), self.num_players, replace=False)
+            selected_spawns = [possible_spawns[i] for i in selected_indices]
+        else:
+            # Fallback if map is too small (unlikely)
+            selected_spawns = [possible_spawns[randint(0, len(possible_spawns)-1)] for _ in range(self.num_players)]
+
         for i, ply in enumerate(self.players):
-            if i < len(spawn_positions):
-                pos = spawn_positions[i]
-            else:
-                # Fallback for more players
-                pos = complex(randint(0, cols-1)*SQSIZE+70+startx, randint(0, rows-1)*SQSIZE+70+starty)
-            
+            c, r = selected_spawns[i]
+            pos = complex(c*SQSIZE+70+startx, r*SQSIZE+70+starty)
             angle = random()*2*pi
             ply.newgame(pos, angle)
         
