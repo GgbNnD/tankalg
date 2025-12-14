@@ -9,12 +9,13 @@ import argparse
 import json
 from tqdm import tqdm
 import torch
+import pickle
 
 # Wrapper for SubprocVecEnv
 def make_env():
     return TankGame(render_mode=False, num_players=2)
 
-def train(resume_path=None, log_file="training_log.jsonl"):
+def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     # Hyperparameters
     POPULATION_SIZE = 50
     GENERATIONS = 200
@@ -24,6 +25,18 @@ def train(resume_path=None, log_file="training_log.jsonl"):
     HIDDEN_SIZE = 256
     OUTPUT_SIZE = 3
     
+    # Load opponent weights if provided
+    opponent_weights = None
+    if opponent_path and os.path.exists(opponent_path):
+        print(f"Loading opponent from {opponent_path}...")
+        try:
+            with open(opponent_path, 'rb') as f:
+                opponent_weights = pickle.load(f)
+            print("Opponent loaded successfully.")
+        except Exception as e:
+            print(f"Error loading opponent: {e}")
+            return
+
     # Use GPU GA
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
@@ -50,7 +63,7 @@ def train(resume_path=None, log_file="training_log.jsonl"):
     num_envs = max(1, os.cpu_count() - 2) # Leave some cores for system/GPU driving
     print(f"Starting vectorized training with {num_envs} environments...")
     
-    envs = SubprocVecEnv([make_env for _ in range(num_envs)])
+    envs = SubprocVecEnv([make_env for _ in range(num_envs)], opponent_weights=opponent_weights)
     
     for gen in range(start_gen, start_gen + GENERATIONS):
         fitness_scores = np.zeros(POPULATION_SIZE)
@@ -148,9 +161,9 @@ def train(resume_path=None, log_file="training_log.jsonl"):
     envs.close()
     print("Training complete!")
 
-def watch_game(model_path="best_ai_final.pkl"):
+def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
     INPUT_SIZE = 20
-    HIDDEN_SIZE = 64
+    HIDDEN_SIZE = 256
     OUTPUT_SIZE = 3
     
     # Use CPU for watching
@@ -162,6 +175,19 @@ def watch_game(model_path="best_ai_final.pkl"):
         print("Could not load model, using random weights")
     
     net = ga.population[0]
+    
+    # Load opponent if provided
+    opponent_net = None
+    if opponent_path and os.path.exists(opponent_path):
+        try:
+            # Create another GA instance just to load weights easily
+            ga_opp = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
+            ga_opp.load_best(opponent_path)
+            opponent_net = ga_opp.population[0]
+            print(f"Loaded opponent from {opponent_path}")
+        except Exception as e:
+            print(f"Could not load opponent: {e}")
+            
     env = TankGame(render_mode=True, num_players=2)
     
     while True:
@@ -174,9 +200,13 @@ def watch_game(model_path="best_ai_final.pkl"):
                     return
             
             action_ai = net.forward(states[0])
-            action_random = [np.random.uniform(-1, 1), np.random.uniform(-1, 1), np.random.uniform(0, 1)]
             
-            states, rewards, done, infos = env.step([action_ai, action_random])
+            if opponent_net:
+                action_opponent = opponent_net.forward(states[1])
+            else:
+                action_opponent = [np.random.uniform(-1, 1), np.random.uniform(-1, 1), np.random.uniform(0, 1)]
+            
+            states, rewards, done, infos = env.step([action_ai, action_opponent])
             env.render()
             env.timer.tick(60)
 
@@ -191,10 +221,11 @@ if __name__ == "__main__":
     parser.add_argument("--resume", type=str, help="Path to .pkl file to resume training from")
     parser.add_argument("--log", type=str, default="training_log.jsonl", help="Path to log file")
     parser.add_argument("--model", type=str, default="best_ai_final.pkl", help="Model path for watch mode")
+    parser.add_argument("--opponent", type=str, help="Path to .pkl file for opponent AI")
     
     args = parser.parse_args()
     
     if args.mode == "watch":
-        watch_game(args.model)
+        watch_game(args.model, args.opponent)
     else:
-        train(resume_path=args.resume, log_file=args.log)
+        train(resume_path=args.resume, log_file=args.log, opponent_path=args.opponent)
