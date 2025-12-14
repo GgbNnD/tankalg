@@ -1,6 +1,6 @@
 import pygame
 import random
-import numpy as np
+from collections import defaultdict
 from ..parts import player, cell, generate_maze, supply
 from .. import tools, setup, constants as C
 
@@ -11,9 +11,6 @@ class Arena:
         self.player_num = player_num
         self.score = score
         self.next = 'arena'
-        # 固定随机种子以保证场景可复现（训练期间使用固定场景便于调试）
-        random.seed(12345)
-        np.random.seed(12345)
         self.random = random.random()
 
         self.setup_states()
@@ -29,33 +26,71 @@ class Arena:
         self.ending_timer = 0
         self.celebrating = False
         self.celebrating_timer = 0
-        # --- RL Event Queue ---
-        self.event_queue = []
-
-    def push_event(self, event):
-        """
-        Push an event to the queue for RL reward calculation.
-        event: dict, e.g. {'type': 'hit', 'attacker': 1, 'victim': 2}
-        """
-        event['time'] = self.clock
-        self.event_queue.append(event)
-
-    def get_and_clear_events(self):
-        """Return all events since last call and clear the queue."""
-        events = list(self.event_queue)
-        self.event_queue.clear()
-        return events
+        # 事件队列（供外部训练/逻辑读取并清空）
+        self._events = []
 
     def setup_map(self):
         self.cells = []
         self.map_surface = pygame.Surface((C.SCREEN_W, C.SCREEN_H)).convert()
         self.map_surface.fill(C.SCREEN_COLOR)
 
-        generate_maze.predeal(self)
-        generate_maze.Generage_Maze(self, 0, 0, C.COLUMN_NUM-1, C.ROW_NUM-1)
+        # 不使用递归迷宫生成器，创建固定网格（无内部墙），地图固定
+        for i in range(0, C.COLUMN_NUM*C.ROW_NUM):
+            col = i % C.COLUMN_NUM
+            row = int(i / C.COLUMN_NUM)
+            walls_sign = 0
+            if row == 0:
+                walls_sign |= C.TOP
+            if row == C.ROW_NUM-1:
+                walls_sign |= C.BOTTOM
+            if col == 0:
+                walls_sign |= C.LEFT
+            if col == C.COLUMN_NUM-1:
+                walls_sign |= C.RIGHT
+
+            self.cells.append(cell.Cell(
+                C.LEFT_SPACE + col * C.BLOCK_SIZE,
+                C.TOP_SPACE + row * C.BLOCK_SIZE,
+                walls_sign=walls_sign))
+            self.cells[i].draw_cell(self.map_surface)
+
+        # 添加固定墙：在 x=1/3 和 x=2/3 处，各一面竖直墙
+        # 第一面从上方向下覆盖高度的 2/3，第二面从下方向上覆盖高度的 2/3
+        self.add_fixed_walls()
 
         for i in range(0, C.COLUMN_NUM*C.ROW_NUM):
             self.cells[i].draw_walls(self.map_surface)
+
+    def add_fixed_walls(self):
+        """
+        在格子间添加两面固定竖直墙：分别位于归一化 x=1/3 和 x=2/3 处。
+        第一面（x=1/3）覆盖顶部 2/3 行；第二面（x=2/3）覆盖底部 2/3 行。
+        """
+        # 计算目标列（取整到格子索引）
+        col1 = int(C.COLUMN_NUM * (1.0/3.0))
+        col2 = int(C.COLUMN_NUM * (2.0/3.0))
+        col1 = max(0, min(C.COLUMN_NUM-1, col1))
+        col2 = max(0, min(C.COLUMN_NUM-1, col2))
+
+        rows_cover = int(round(C.ROW_NUM * (2.0/3.0)))
+
+        # 在列边界处添加 RIGHT（放在左侧单元格的右侧）或 LEFT（若在最左边）的墙
+        for row in range(0, rows_cover):
+            if col1 > 0:
+                idx = generate_maze.get_idx(col1-1, row)
+                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x + C.BLOCK_SIZE, self.cells[idx].rect.y, C.RIGHT))
+            else:
+                idx = generate_maze.get_idx(col1, row)
+                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x, self.cells[idx].rect.y, C.LEFT))
+
+        start_row = C.ROW_NUM - rows_cover
+        for row in range(start_row, C.ROW_NUM):
+            if col2 > 0:
+                idx = generate_maze.get_idx(col2-1, row)
+                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x + C.BLOCK_SIZE, self.cells[idx].rect.y, C.RIGHT))
+            else:
+                idx = generate_maze.get_idx(col2, row)
+                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x, self.cells[idx].rect.y, C.LEFT))
 
     def setup_supplies(self):
         self.supply_num = 0
@@ -68,46 +103,15 @@ class Arena:
         self.players = pygame.sprite.Group()
 
         vised = {}
-        player_positions = [] # Store (x, y) of placed players
-
         for i in range(3):
             if self.score[i] != -1:
                 aplayer = player.player(i+1, self)
-                
-                # Try to find a valid position
-                valid_pos = False
-                attempts = 0
-                while not valid_pos and attempts < 100:
+                x = int(random.random()*C.COLUMN_NUM)
+                y = int(random.random()*C.ROW_NUM)
+                while vised.get(generate_maze.get_idx(x, y), False):
                     x = int(random.random()*C.COLUMN_NUM)
                     y = int(random.random()*C.ROW_NUM)
-                    idx = generate_maze.get_idx(x, y)
-                    
-                    # Check if cell is already occupied
-                    if vised.get(idx, False):
-                        attempts += 1
-                        continue
-                        
-                    # Check distance to other players (Manhattan distance > 2 blocks)
-                    too_close = False
-                    for px, py in player_positions:
-                        if abs(px - x) + abs(py - y) < 3:
-                            too_close = True
-                            break
-                    
-                    if too_close:
-                        attempts += 1
-                        continue
-
-                    # 允许随机出生：不再跳过被4面墙包围的格子（出生位置随机）
-                        
-                    valid_pos = True
-                    vised[idx] = True
-                    player_positions.append((x, y))
-
-                # If we couldn't find a far spot, just take the last random one (fallback)
-                if not valid_pos:
-                     vised[generate_maze.get_idx(x, y)] = True
-
+                vised[generate_maze.get_idx(x, y)] = True
                 aplayer.x = self.cells[generate_maze.get_idx(
                     x, y)].rect.centerx*C.MOTION_CALC_SCALE
                 aplayer.y = self.cells[generate_maze.get_idx(
@@ -188,7 +192,6 @@ class Arena:
                 if hitbox:
                     setup.SOUNDS['pick'].play()
                     asupply.kill()
-                    self.push_event({'type': 'get_supply', 'player': player.name})
                     self.supply_num -= 1
                     self.supply_timer = self.clock
                     if asupply.type:
@@ -206,8 +209,15 @@ class Arena:
 
     def get_ai_keys(self, player, original_keys):
         # 简单的随机 AI 逻辑
-        new_keys = list(original_keys)
-        
+        # original_keys 可能是 pygame.key.get_pressed()（序列）
+        # 也可能是训练逻辑传入的 dict/defaultdict（mapping）
+        if hasattr(original_keys, 'get'):
+            # 创建一个 defaultdict(int) 以便对缺失键返回 0
+            new_keys = defaultdict(int)
+            new_keys.update(original_keys)
+        else:
+            new_keys = list(original_keys)
+
         # 清除玩家2的手动按键，防止干扰
         new_keys[pygame.K_i] = 0
         new_keys[pygame.K_k] = 0
@@ -239,18 +249,18 @@ class Arena:
         return new_keys
 
     def update(self, surface, keys):
-        # Use internal clock if available, else wall clock
-        if hasattr(self, 'manual_clock') and self.manual_clock:
-            self.clock += 1000 / C.FRAME_RATE
-        else:
-            self.clock = pygame.time.get_ticks()
-            
+        self.clock = pygame.time.get_ticks()
         self.random = random.random()
         self.draw_map(surface)
 
         if not self.pause and not self.celebrating:
             for aplayer in self.players:
-                aplayer.update(keys)
+                if aplayer.name == 2:
+                    # 玩家2 使用 AI 控制
+                    ai_keys = self.get_ai_keys(aplayer, keys)
+                    aplayer.update(ai_keys)
+                else:
+                    aplayer.update(keys)
 
             self.update_supply()
 
@@ -345,3 +355,11 @@ class Arena:
                 'score': tuple(self.score)
             }
         }
+
+    def get_and_clear_events(self):
+        """返回当前事件列表并清空。事件的产生点可在后续需要时加入到 `self._events` 中。
+        目前返回的事件格式由调用方决定；这里提供最小兼容性实现以配合训练脚本。
+        """
+        events = list(self._events)
+        self._events.clear()
+        return events

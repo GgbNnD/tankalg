@@ -32,14 +32,32 @@ class TankEnv:
         self.arena = arena.Arena()
         self.action_space_n = 6 # Idle, Fwd, Bwd, Left, Right, Fire
         
-        # State Dimension Calculation:
-        # Self (9) + 2 Enemies (7*2=14) + Shells (4*5=20) + Lidar (8) + Supply (3) + Danger (3) = 57
-        self.state_dim = 57
+        # State dimension will be determined after first reset (dynamic, avoid mismatch)
+        self.state_dim = None
         self.max_steps = 2000
         self.player_ids = [1, 2, 3]
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.get_surface()
         self.paused = False
+        # 性能调节参数
+        # CLI 下可增加 frame-skip（action_repeat）来减少策略决策频率
+        self.action_repeat = 1 if mode == 'gui' else 4
+        # 每隔多少步计算一次昂贵的路径/子弹-敌人距离，降低 BFS 调用频率
+        self.path_compute_interval = 4
+        # Lidar 采样数（方向数），CLI 下减少以降低开销
+        self.lidar_samples = 8 if mode == 'gui' else 4
+        # 墙体矩形缓存，用于射线检测加速（lazy build）
+        self.wall_rects = []
+        # 初始化环境并计算真实状态维度
+        try:
+            states = self.reset()
+            # 取第一个玩家的向量长度作为 state_dim
+            if isinstance(states, dict) and len(states) > 0:
+                first_pid = next(iter(states))
+                self.state_dim = len(states[first_pid])
+        except Exception:
+            # 在极端情况退回到保守默认
+            self.state_dim = 57
         
     def reset(self):
         # Setup arena with 3 players
@@ -55,6 +73,14 @@ class TankEnv:
                 self.prev_positions[pid] = (p.x, p.y)
             else:
                 self.prev_positions[pid] = (0, 0)
+        # 每步短时位置，用于密集的移动奖励
+        self.prev_positions_step = {}
+        for pid in self.player_ids:
+            p = self.arena.get_player(pid)
+            if p:
+                self.prev_positions_step[pid] = (p.x, p.y)
+            else:
+                self.prev_positions_step[pid] = (0, 0)
                 
         # Track nearest enemy distances (网格路径长度) and nearest own-shell-to-enemy distances
         # 用于判断是否在通过迷宫靠近敌人或子弹是否更接近敌人
@@ -69,6 +95,10 @@ class TankEnv:
                 self.prev_shell_min_distances[pid] = self._min_shell_enemy_distance(raw_state, pid)
                 # Grid-based shortest path length to nearest enemy (steps)
                 self.prev_path_lengths[pid] = self._nearest_enemy_path_length(raw_state, pid)
+            # 玩家到最近子弹的初始距离（用于躲避奖励）
+            self.prev_player_shell_min_distances = {}
+            for pid in self.player_ids:
+                self.prev_player_shell_min_distances[pid] = self._min_shell_player_distance(raw_state, pid)
         except Exception:
             # 如果在 reset 时计算失败，使用默认远距离
             for pid in self.player_ids:
@@ -76,14 +106,17 @@ class TankEnv:
                 self.prev_shell_min_distances[pid] = 1.0
                 self.prev_path_lengths[pid] = C.COLUMN_NUM * C.ROW_NUM
 
+        # 在 reset 时强制重建墙体缓存
+        self.wall_rects = []
         return self.get_all_states()
         
     def get_all_states(self):
         states = {}
         raw_state = self.arena.get_state(normalize=True)
-        # 预先计算所有墙壁的矩形，用于射线检测加速
-        self.wall_rects = [pygame.Rect(w['x']*C.SCREEN_W, w['y']*C.SCREEN_H, w['w']*C.SCREEN_W, w['h']*C.SCREEN_H) 
-                           for w in raw_state['walls']]
+        # 只在缓存为空时构建墙体矩形，避免每步重复构造（性能优化）
+        if not getattr(self, 'wall_rects', None):
+            self.wall_rects = [pygame.Rect(w['x']*C.SCREEN_W, w['y']*C.SCREEN_H, w['w']*C.SCREEN_W, w['h']*C.SCREEN_H) 
+                               for w in raw_state.get('walls', [])]
         
         for pid in self.player_ids:
             states[pid] = self.get_state_vector(raw_state, pid)
@@ -118,16 +151,26 @@ class TankEnv:
             pass
             
         self.steps += 1
-        
+
         keys = defaultdict(int)
         for pid, act in actions.items():
             self.map_action_to_keys(pid, act, keys)
-            
-        self.arena.update(self.screen, keys)
-        
-        # 每 5 帧才刷新一次屏幕，大幅减少渲染开销
-        if self.mode == 'gui' and self.steps % 5 == 0:
-            pygame.display.update()
+
+        # 支持 frame-skip / action_repeat：在 CLI 下重复执行同一 action 以减少决策频率
+        accumulated_events = []
+        for _rep in range(self.action_repeat):
+            self.arena.update(self.screen, keys)
+            # 收集并累积 events（arena 内部会清空事件队列）
+            try:
+                evs = self.arena.get_and_clear_events()
+                if evs:
+                    accumulated_events.extend(evs)
+            except Exception:
+                pass
+
+            # 仅在 GUI 模式下进行有限频率的屏幕刷新
+            if self.mode == 'gui' and self.steps % 5 == 0:
+                pygame.display.update()
         
         next_states = self.get_all_states()
         # 当前完整场景状态（归一化），用于距离计算和子弹近敌奖励
@@ -136,7 +179,8 @@ class TankEnv:
         dones = {pid: False for pid in self.player_ids}
         
         # 3. Reward Calculation
-        events = self.arena.get_and_clear_events()
+        # 使用刚才累积的 events（如果 frame-skip 时已收集）
+        events = accumulated_events if accumulated_events else self.arena.get_and_clear_events()
         for event in events:
             if event['type'] == 'hit':
                 attacker = event['attacker']
@@ -156,6 +200,9 @@ class TankEnv:
         
         game_over = self.arena.finished
         
+        # 是否本步需要重新计算昂贵的路径/子弹距离
+        compute_paths_this_step = (self.steps % self.path_compute_interval == 0)
+
         for pid in self.player_ids:
             p = self.arena.get_player(pid)
             
@@ -167,90 +214,113 @@ class TankEnv:
             
             if game_over:
                 dones[pid] = True
-                if p and not p.dead:
-                    rewards[pid] += 50 # 胜利奖励
             
-            # 存活/行为奖励
+            # 存活/行为奖励（密集奖励设计）
             if p and not p.dead:
-                rewards[pid] += 0.01 # 降低纯存活奖励，迫使它们去寻找击杀
-                
-                # 撞墙/贴墙惩罚 + 前方非常近时的撞墙惩罚
+                # 小的存活常规奖励，鼓励活跃行为
+                rewards[pid] += 0.005
+
+                # Lidar 和前方距离检测（保持但大幅减弱惩罚）
                 lidar = self.compute_lidar(p)
                 front_dist = lidar[0] if len(lidar) > 0 else 1.0
-                if min(lidar) < 0.1: # 距离墙壁非常近 (约10像素)
-                    rewards[pid] -= 0.5 # 持续的贴墙惩罚
+                if min(lidar) < 0.1:
+                    rewards[pid] -= 0.05  # 更稀疏/更小的贴墙惩罚
 
-                # 检查是否停滞 (Stagnation Check)
+                # 每步移动的密集奖励（鼓励短时间内大范围移动）
                 curr_pos = (p.x, p.y)
+                prev_step_pos = self.prev_positions_step.get(pid, curr_pos)
+                dist_step = math.hypot(curr_pos[0] - prev_step_pos[0], curr_pos[1] - prev_step_pos[1])
+                # 每像素给予少量正奖励（密集），使快速移动累积明显回报
+                rewards[pid] += 0.02 * dist_step
+
+                # 长期停滞检测（稀疏惩罚）——保持但减弱
                 prev_pos = self.prev_positions.get(pid, curr_pos)
                 dist_moved = math.hypot(curr_pos[0] - prev_pos[0], curr_pos[1] - prev_pos[1])
-                
-                # 每 30 步更新一次位置记录，用于检测长期停滞（放宽触发条件）
                 if self.steps % 30 == 0:
                     self.prev_positions[pid] = curr_pos
-                    if dist_moved < 20.0: # 如果30步内移动距离小于20像素 (加大移动要求)
-                        rewards[pid] -= 5.0 # 停滞惩罚
+                    if dist_moved < 20.0:
+                        rewards[pid] -= 1.0  # 减弱停滞惩罚，保持稀疏
 
-                # 如果向前且前方非常近，视为撞墙行为，重罚
+                # 如果向前且前方非常近，视为撞墙行为，轻惩
                 if actions.get(pid) == 1 and front_dist < 0.05:
-                    rewards[pid] -= 2.0
+                    rewards[pid] -= 0.5
 
-                # 危险感知惩罚：如果有子弹正向我飞来且距离很近
-                # 从 state vector 中提取 danger info (倒数3个)
-                # 这里无法直接访问 state vector，重新计算简化版
-                # 或者在 get_all_states 时计算并存起来，这里简化处理：
-                # 只要有子弹在极近距离 (0.1) 内，就给惩罚
-                nearest_shell_dist = self._min_shell_enemy_distance(raw_state, pid) # 这个函数其实是算子弹离敌人的距离...
-                # 我们需要算子弹离自己的距离
+                # 子弹危险检测（减弱惩罚）：若子弹非常近则轻惩
                 min_s_dist = 1.0
                 for s in raw_state['shells']:
-                     dx = s['x'] - p.x / (C.COLUMN_NUM * C.BLOCK_SIZE * C.MOTION_CALC_SCALE)
-                     dy = s['y'] - p.y / (C.ROW_NUM * C.BLOCK_SIZE * C.MOTION_CALC_SCALE)
-                     d = math.hypot(dx, dy)
-                     if d < min_s_dist: min_s_dist = d
-                
-                if min_s_dist < 0.1: # 危险距离
-                    rewards[pid] -= 0.5 # 处于危险中
+                    dx = s['x'] - p.x / (C.COLUMN_NUM * C.BLOCK_SIZE * C.MOTION_CALC_SCALE)
+                    dy = s['y'] - p.y / (C.ROW_NUM * C.BLOCK_SIZE * C.MOTION_CALC_SCALE)
+                    d = math.hypot(dx, dy)
+                    if d < min_s_dist: min_s_dist = d
+                if min_s_dist < 0.08:
+                    rewards[pid] -= 0.2
 
-                # 奖励：基于迷宫网格的路径长度变化来鼓励导航靠近敌人
+                # 躲避子弹奖励：如果与最近子弹的距离比上一步更远，则给予正奖励（稠密正反馈）
                 try:
-                    # 网格路径长度（steps）——较小表示更接近，通过 delta 来奖励导航行为
-                    curr_path_len = self._nearest_enemy_path_length(raw_state, pid)
-                    prev_path_len = self.prev_path_lengths.get(pid, C.COLUMN_NUM * C.ROW_NUM)
-                    delta_path = prev_path_len - curr_path_len
-                    if delta_path > 0:
-                        # 每缩短一步给予奖励（系数可调），并限制单步奖励上限
-                        rewards[pid] += min(5.0 * delta_path, 10.0) # 加大导航奖励
-                        # 如果已经到达同格，给额外小奖励以鼓励接近并尝试击杀
-                        if curr_path_len == 0:
-                            rewards[pid] += 5.0
-                    self.prev_path_lengths[pid] = curr_path_len
-
-                    # 保留子弹接近敌人的奖励，鼓励瞄准/射击
-                    curr_shell_dist = self._min_shell_enemy_distance(raw_state, pid)
-                    prev_shell = self.prev_shell_min_distances.get(pid, 1.0)
-                    delta_shell = prev_shell - curr_shell_dist
-                    if delta_shell > 0:
-                        rewards[pid] += min(5.0 * delta_shell, 5.0) # 加大射击精度奖励
-                    self.prev_shell_min_distances[pid] = curr_shell_dist
+                    curr_player_shell_dist = self._min_shell_player_distance(raw_state, pid)
+                    prev_player_shell = self.prev_player_shell_min_distances.get(pid, 1.0)
+                    delta_player_shell = curr_player_shell_dist - prev_player_shell
+                    if delta_player_shell > 0:
+                        rewards[pid] += min(8.0 * delta_player_shell, 5.0)
+                    self.prev_player_shell_min_distances[pid] = curr_player_shell_dist
                 except Exception:
                     pass
 
-                # 危险操作惩罚：如果正前方很近有墙，还开火
-                if actions.get(pid) == 5: # Fire
-                    rewards[pid] -= 0.1 # 开火成本 (Ammo Cost)
-                    if front_dist < 0.2: # 距离很近
-                        rewards[pid] -= 2.0 # 惩罚贴脸开火
-                    # 惩罚原地开火
-                    if not p.moving:
-                        rewards[pid] -= 2.0
+                # 周期性计算网格路径与子弹->敌人最小距离（降低 BFS 调用频率）
+                if compute_paths_this_step:
+                    try:
+                        curr_path_len = self._nearest_enemy_path_length(raw_state, pid)
+                        prev_path_len = self.prev_path_lengths.get(pid, C.COLUMN_NUM * C.ROW_NUM)
+                        delta_path = prev_path_len - curr_path_len
+                        if delta_path > 0:
+                            rewards[pid] += min(6.0 * delta_path, 12.0)
+                            if curr_path_len == 0:
+                                rewards[pid] += 3.0
+                        self.prev_path_lengths[pid] = curr_path_len
 
-                # 移动奖励
-                # 缓和鼓励移动：小正奖励，未移动不再重罚
+                        # 子弹接近敌人的奖励（鼓励命中/瞄准）
+                        curr_shell_dist = self._min_shell_enemy_distance(raw_state, pid)
+                        prev_shell = self.prev_shell_min_distances.get(pid, 1.0)
+                        delta_shell = prev_shell - curr_shell_dist
+                        if delta_shell > 0:
+                            rewards[pid] += min(6.0 * delta_shell, 6.0)
+                        self.prev_shell_min_distances[pid] = curr_shell_dist
+                    except Exception:
+                        pass
+
+                # 面向敌人并开火的奖励：增加积极进攻行为回报
+                if actions.get(pid) == 5:  # Fire
+                    rewards[pid] += 0.5  # 小的开火鼓励
+                    # 计算是否面向最近敌人
+                    me_norm = None
+                    nearest_enemy = None
+                    for rp in raw_state.get('players', []):
+                        if rp.get('name') == pid:
+                            me_norm = rp
+                            break
+                    if me_norm:
+                        me_x, me_y = float(me_norm.get('x', 0.0)), float(me_norm.get('y', 0.0))
+                        best_d = 1e9
+                        for rp in raw_state.get('players', []):
+                            if rp.get('name') == pid or rp.get('dead', False):
+                                continue
+                            ex, ey = float(rp.get('x', 0.0)), float(rp.get('y', 0.0))
+                            d = math.hypot(ex-me_x, ey-me_y)
+                            if d < best_d:
+                                best_d = d
+                                nearest_enemy = (ex, ey)
+                        if nearest_enemy is not None and best_d < 1.0:
+                            ang_to_enemy = math.atan2(nearest_enemy[1]-me_y, nearest_enemy[0]-me_x)
+                            ang_diff = abs((ang_to_enemy - p.theta + math.pi) % (2*math.pi) - math.pi)
+                            if ang_diff < math.radians(30):
+                                rewards[pid] += 3.0
+
+                # 如果移动，则额外小奖励（移动稠密奖励已存在），但不再惩罚静止
                 if p.moving:
-                    rewards[pid] += 0.1
-                else:
-                    rewards[pid] -= 0.1 # 稍微惩罚静止
+                    rewards[pid] += 0.02
+
+                # 更新每步位置记录
+                self.prev_positions_step[pid] = curr_pos
 
 
         if self.steps >= self.max_steps:
@@ -267,8 +337,9 @@ class TankEnv:
         sensors = []
         start_x, start_y = p.x / C.MOTION_CALC_SCALE, p.y / C.MOTION_CALC_SCALE
         
-        # 8 directions: 0, 45, 90, 135, 180, 225, 270, 315 relative to player heading
-        for angle_deg in range(0, 360, 45):
+        # 根据配置的采样数计算采样角度（减少方向数可以加速）
+        step_deg = int(360 / max(1, getattr(self, 'lidar_samples', 8)))
+        for angle_deg in range(0, 360, step_deg):
             angle_rad = p.theta + math.radians(angle_deg)
             dx = math.cos(angle_rad)
             dy = math.sin(angle_rad)
@@ -276,8 +347,11 @@ class TankEnv:
             dist = 1.0 # Max distance (normalized)
             
             # 简化的射线检测：沿射线采样几个点
-            # 真实射线检测太慢，这里检测 5 个关键点: 20px, 50px, 100px, 150px, 200px
-            check_points = [20, 50, 100, 150, 200]
+            # CLI 模式下减少采样点以加速
+            if getattr(self, 'lidar_samples', 8) <= 4:
+                check_points = [40, 120]
+            else:
+                check_points = [20, 50, 100, 150, 200]
             max_range = 200.0
             
             found_wall = False
@@ -478,6 +552,28 @@ class TankEnv:
                 d = math.hypot(sx-ex, sy-ey)
                 if d < min_dist:
                     min_dist = d
+        return min_dist
+
+    def _min_shell_player_distance(self, raw_state, pid):
+        """
+        返回玩家 pid 与最近任意子弹的最小距离 (归一化)，没有则返回 1.0
+        """
+        shells = raw_state.get('shells', [])
+        players = raw_state.get('players', [])
+        me = None
+        for p in players:
+            if p.get('name') == pid:
+                me = p
+                break
+        if not me or not shells:
+            return 1.0
+        px, py = float(me.get('x', 0.0)), float(me.get('y', 0.0))
+        min_dist = 1.0
+        for s in shells:
+            sx, sy = float(s.get('x', 0.0)), float(s.get('y', 0.0))
+            d = math.hypot(sx-px, sy-py)
+            if d < min_dist:
+                min_dist = d
         return min_dist
 
     def get_state_vector(self, raw_state, pid):
@@ -691,7 +787,7 @@ def train():
     memories = {pid: Memory() for pid in env.player_ids}
     
     max_episodes = 5000
-    update_timestep = 8000 # Increased for better GPU utilization and stable updates
+    update_timestep = 10000 # Increased for better GPU utilization and stable updates
     time_step = 0
     
     print("Starting MULTI-AGENT training (3 Separate Brains)...")
