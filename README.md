@@ -12,4 +12,4 @@
 ## 观察训练结果
 
 - python train.py watch --model best_ai_gen_130.pkl
-- python train.py watch --model best_ai_gen_170.pkl --opponent best_ai_gen_170.pkl
+- python train.py watch --model best_ai_gen_170.pkl --opponent best_ai_gen_150.pkl
