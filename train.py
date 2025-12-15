@@ -19,10 +19,11 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     # Hyperparameters
     POPULATION_SIZE = 50
     GENERATIONS = 200
-    GAMES_PER_GEN = 5 # Play 5 games against random opponent
+    GAMES_PER_GEN = 2 # Play 5 games against random opponent
     
     INPUT_SIZE = 20
-    HIDDEN_SIZE = 256
+    HIDDEN_SIZE_1 = 256
+    HIDDEN_SIZE_2 = 256
     OUTPUT_SIZE = 3
     
     # Load opponent weights if provided
@@ -41,7 +42,7 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
     
-    ga = GPUGeneticAlgorithm(POPULATION_SIZE, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, device=device)
+    ga = GPUGeneticAlgorithm(POPULATION_SIZE, INPUT_SIZE, HIDDEN_SIZE_1, HIDDEN_SIZE_2, OUTPUT_SIZE, device=device)
     
     start_gen = 0
     if resume_path and os.path.exists(resume_path):
@@ -163,11 +164,12 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
 
 def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
     INPUT_SIZE = 20
-    HIDDEN_SIZE = 256
+    HIDDEN_SIZE_1 = 256
+    HIDDEN_SIZE_2 = 256
     OUTPUT_SIZE = 3
     
     # Use CPU for watching
-    ga = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
+    ga = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE_1, HIDDEN_SIZE_2, OUTPUT_SIZE)
     try:
         ga.load_best(model_path)
         print(f"Loaded model from {model_path}")
@@ -181,7 +183,7 @@ def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
     if opponent_path and os.path.exists(opponent_path):
         try:
             # Create another GA instance just to load weights easily
-            ga_opp = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
+            ga_opp = GeneticAlgorithm(1, INPUT_SIZE, HIDDEN_SIZE_1, HIDDEN_SIZE_2, OUTPUT_SIZE)
             ga_opp.load_best(opponent_path)
             opponent_net = ga_opp.population[0]
             print(f"Loaded opponent from {opponent_path}")
