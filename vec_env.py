@@ -16,13 +16,21 @@ def worker(remote, parent_remote, env_fn_wrapper, opponent_weights=None):
     opponent_ai = None
     if opponent_weights is not None:
         # We need to know the input/hidden/output sizes
-        # Assuming standard sizes for now or inferring from weights
-        # weights keys: w1, b1, w2, b2
+        # Inferring from weights
         input_size = opponent_weights['w1'].shape[0]
-        hidden_size = opponent_weights['w1'].shape[1]
-        output_size = opponent_weights['w2'].shape[1]
+        hidden_size1 = opponent_weights['w1'].shape[1]
         
-        opponent_ai = NeuralNetwork(input_size, hidden_size, output_size)
+        if 'w3' in opponent_weights:
+            # New model (2 hidden layers)
+            hidden_size2 = opponent_weights['w2'].shape[1]
+            output_size = opponent_weights['w3'].shape[1]
+        else:
+            # Old model (1 hidden layer)
+            # Map old hidden size to both hidden1 and hidden2 to satisfy shape requirements for adaptation
+            hidden_size2 = hidden_size1
+            output_size = opponent_weights['w2'].shape[1]
+        
+        opponent_ai = NeuralNetwork(input_size, hidden_size1, hidden_size2, output_size)
         opponent_ai.set_weights(opponent_weights)
     
     try:
