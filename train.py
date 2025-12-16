@@ -23,7 +23,7 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     
     INPUT_SIZE = 20
     HIDDEN_SIZE_1 = 256
-    HIDDEN_SIZE_2 = 256
+    HIDDEN_SIZE_2 = 64
     OUTPUT_SIZE = 3
     
     # Load opponent weights if provided
