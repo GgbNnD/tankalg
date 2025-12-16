@@ -22,8 +22,8 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     GAMES_PER_GEN = 2 # Play 5 games against random opponent
     
     INPUT_SIZE = 20
-    HIDDEN_SIZE_1 = 256
-    HIDDEN_SIZE_2 = 64
+    HIDDEN_SIZE_1 = 64
+    HIDDEN_SIZE_2 = 32
     OUTPUT_SIZE = 3
     
     # Load opponent weights if provided
@@ -164,8 +164,8 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
 
 def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
     INPUT_SIZE = 20
-    HIDDEN_SIZE_1 = 256
-    HIDDEN_SIZE_2 = 256
+    HIDDEN_SIZE_1 = 64
+    HIDDEN_SIZE_2 = 32
     OUTPUT_SIZE = 3
     
     # Use CPU for watching
