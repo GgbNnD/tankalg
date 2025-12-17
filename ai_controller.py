@@ -28,11 +28,11 @@ class NeuralNetwork:
         
         # Layer 1
         self.z1 = np.dot(x, self.w1) + self.b1
-        self.a1 = np.tanh(self.z1) 
+        self.a1 = np.maximum(0, self.z1) # ReLU
         
         # Layer 2
         self.z2 = np.dot(self.a1, self.w2) + self.b2
-        self.a2 = np.tanh(self.z2)
+        self.a2 = np.maximum(0, self.z2) # ReLU
         
         # Layer 3
         self.z3 = np.dot(self.a2, self.w3) + self.b3
@@ -109,9 +109,9 @@ class PopulationNetwork:
             
         x = x.unsqueeze(1)
         z1 = torch.bmm(x, self.w1) + self.b1
-        a1 = torch.tanh(z1)
+        a1 = torch.relu(z1)
         z2 = torch.bmm(a1, self.w2) + self.b2
-        a2 = torch.tanh(z2)
+        a2 = torch.relu(z2)
         z3 = torch.bmm(a2, self.w3) + self.b3
         a3 = torch.tanh(z3)
         
@@ -139,9 +139,9 @@ class PopulationNetwork:
         b3 = self.b3[indices]
         
         z1 = torch.bmm(x, w1) + b1
-        a1 = torch.tanh(z1)
+        a1 = torch.relu(z1)
         z2 = torch.bmm(a1, w2) + b2
-        a2 = torch.tanh(z2)
+        a2 = torch.relu(z2)
         z3 = torch.bmm(a2, w3) + b3
         a3 = torch.tanh(z3)
         
@@ -217,66 +217,74 @@ class GPUGeneticAlgorithm:
         new_b3[:elite_count] = self.pop.b3[elite_indices_tensor]
         
         # Generate offspring
-        # Tournament selection for the rest
+        # Roulette Wheel Selection
         num_children = self.pop_size - elite_count
         
-        # Vectorized tournament selection
-        # We need to select 'num_children' pairs of parents
-        # Let's do it on CPU for simplicity of logic, then index GPU tensors
+        # Adjust fitness for Roulette Wheel (must be positive)
+        min_fitness = np.min(fitness_scores)
+        adj_fitness = fitness_scores - min_fitness + 1e-5
+        probs = adj_fitness / np.sum(adj_fitness)
         
-        parent1_indices = []
-        parent2_indices = []
+        # Select parents
+        # We need pairs for crossover
+        parent_indices = np.random.choice(self.pop_size, size=num_children * 2, p=probs, replace=True)
         
-        for _ in range(num_children):
-            # Tournament 1
-            candidates = np.random.choice(self.pop_size, 3, replace=False)
-            p1 = candidates[np.argmax(fitness_scores[candidates])]
-            parent1_indices.append(p1)
+        p1_indices = parent_indices[:num_children]
+        p2_indices = parent_indices[num_children:]
             
-            # Tournament 2
-            candidates = np.random.choice(self.pop_size, 3, replace=False)
-            p2 = candidates[np.argmax(fitness_scores[candidates])]
-            parent2_indices.append(p2)
-            
-        p1_tensor = torch.tensor(parent1_indices, device=self.device)
-        p2_tensor = torch.tensor(parent2_indices, device=self.device)
+        p1_tensor = torch.tensor(p1_indices, device=self.device)
+        p2_tensor = torch.tensor(p2_indices, device=self.device)
         
-        # Crossover (Uniform)
-        # Generate masks
-        # w1 shape: (num_children, input, hidden)
+        # Neuron-wise Crossover (Column Crossover)
+        # Instead of swapping individual weights (which breaks feature detectors),
+        # we swap entire neurons (all incoming weights + bias) as a unit.
+        
+        # 1. Hidden Layer 1 Neurons
+        # w1 shape: (N, Input, Hidden1)
+        # We generate a mask for each neuron in Hidden1: (N, 1, Hidden1)
+        mask_h1 = (torch.rand(num_children, 1, self.hidden_size1, device=self.device) > 0.5)
+        
         w1_p1 = self.pop.w1[p1_tensor]
         w1_p2 = self.pop.w1[p2_tensor]
-        mask_w1 = (torch.rand_like(w1_p1) > 0.5)
-        child_w1 = torch.where(mask_w1, w1_p1, w1_p2)
+        # Broadcast mask_h1 across Input dimension
+        child_w1 = torch.where(mask_h1, w1_p1, w1_p2)
         
         b1_p1 = self.pop.b1[p1_tensor]
         b1_p2 = self.pop.b1[p2_tensor]
-        mask_b1 = (torch.rand_like(b1_p1) > 0.5)
-        child_b1 = torch.where(mask_b1, b1_p1, b1_p2)
+        child_b1 = torch.where(mask_h1, b1_p1, b1_p2)
+        
+        # 2. Hidden Layer 2 Neurons
+        # w2 shape: (N, Hidden1, Hidden2)
+        # Mask for Hidden2 neurons: (N, 1, Hidden2)
+        mask_h2 = (torch.rand(num_children, 1, self.hidden_size2, device=self.device) > 0.5)
         
         w2_p1 = self.pop.w2[p1_tensor]
         w2_p2 = self.pop.w2[p2_tensor]
-        mask_w2 = (torch.rand_like(w2_p1) > 0.5)
-        child_w2 = torch.where(mask_w2, w2_p1, w2_p2)
+        # Broadcast mask_h2 across Hidden1 dimension (swapping columns)
+        child_w2 = torch.where(mask_h2, w2_p1, w2_p2)
         
         b2_p1 = self.pop.b2[p1_tensor]
         b2_p2 = self.pop.b2[p2_tensor]
-        mask_b2 = (torch.rand_like(b2_p1) > 0.5)
-        child_b2 = torch.where(mask_b2, b2_p1, b2_p2)
+        child_b2 = torch.where(mask_h2, b2_p1, b2_p2)
+
+        # 3. Output Neurons
+        # w3 shape: (N, Hidden2, Output)
+        # Mask for Output neurons: (N, 1, Output)
+        mask_out = (torch.rand(num_children, 1, self.output_size, device=self.device) > 0.5)
 
         w3_p1 = self.pop.w3[p1_tensor]
         w3_p2 = self.pop.w3[p2_tensor]
-        mask_w3 = (torch.rand_like(w3_p1) > 0.5)
-        child_w3 = torch.where(mask_w3, w3_p1, w3_p2)
+        # Broadcast mask_out across Hidden2 dimension
+        child_w3 = torch.where(mask_out, w3_p1, w3_p2)
         
         b3_p1 = self.pop.b3[p1_tensor]
         b3_p2 = self.pop.b3[p2_tensor]
-        mask_b3 = (torch.rand_like(b3_p1) > 0.5)
-        child_b3 = torch.where(mask_b3, b3_p1, b3_p2)
+        child_b3 = torch.where(mask_out, b3_p1, b3_p2)
         
         # Mutation
-        mutation_rate = 0.1
-        mutation_scale = 0.2
+        # Restoring mutation parameters for balanced exploration
+        mutation_rate = 0.05
+        mutation_scale = 0.1
         
         def mutate_tensor(t):
             mask = torch.rand_like(t) < mutation_rate

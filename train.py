@@ -17,7 +17,7 @@ def make_env():
 
 def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     # Hyperparameters
-    POPULATION_SIZE = 50
+    POPULATION_SIZE = 100
     GENERATIONS = 200
     GAMES_PER_GEN = 2 # Play 5 games against random opponent
     
@@ -164,8 +164,8 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
 
 def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
     INPUT_SIZE = 20
-    HIDDEN_SIZE_1 = 64
-    HIDDEN_SIZE_2 = 32
+    HIDDEN_SIZE_1 = 256
+    HIDDEN_SIZE_2 = 64
     OUTPUT_SIZE = 3
     
     # Use CPU for watching
