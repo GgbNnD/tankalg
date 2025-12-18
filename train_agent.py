@@ -7,26 +7,33 @@ from maze_game import Entity, AI, MazeGame
 import os
 
 class NeuralNetwork:
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, hidden_size1, hidden_size2, output_size):
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.hidden_size1 = hidden_size1
+        self.hidden_size2 = hidden_size2
         self.output_size = output_size
         
         # 初始化权重 (使用标准正态分布)
-        self.w1 = np.random.randn(input_size, hidden_size)
-        self.b1 = np.zeros(hidden_size)
-        self.w2 = np.random.randn(hidden_size, output_size)
-        self.b2 = np.zeros(output_size)
+        self.w1 = np.random.randn(input_size, hidden_size1) * np.sqrt(2/input_size)
+        self.b1 = np.zeros(hidden_size1)
+        self.w2 = np.random.randn(hidden_size1, hidden_size2) * np.sqrt(2/hidden_size1)
+        self.b2 = np.zeros(hidden_size2)
+        self.w3 = np.random.randn(hidden_size2, output_size) * np.sqrt(2/hidden_size2)
+        self.b3 = np.zeros(output_size)
 
     def forward(self, x):
-        # 前向传播
+        # 前向传播 (使用 ReLU 激活函数，最后一层不激活)
         self.z1 = np.dot(x, self.w1) + self.b1
-        self.a1 = np.tanh(self.z1) # 激活函数
+        self.a1 = np.maximum(0, self.z1) # ReLU
+        
         self.z2 = np.dot(self.a1, self.w2) + self.b2
-        return self.z2 # 返回原始输出 (Logits)，在外部进行处理
+        self.a2 = np.maximum(0, self.z2) # ReLU
+        
+        self.z3 = np.dot(self.a2, self.w3) + self.b3
+        return self.z3 # Logits
 
     def save(self, filename):
-        np.savez(filename, w1=self.w1, b1=self.b1, w2=self.w2, b2=self.b2)
+        np.savez(filename, w1=self.w1, b1=self.b1, w2=self.w2, b2=self.b2, w3=self.w3, b3=self.b3)
         
     def load(self, filename):
         data = np.load(filename)
@@ -34,22 +41,46 @@ class NeuralNetwork:
         self.b1 = data['b1']
         self.w2 = data['w2']
         self.b2 = data['b2']
+        self.w3 = data['w3']
+        self.b3 = data['b3']
 
     def get_weights(self):
-        return np.concatenate([self.w1.flatten(), self.b1.flatten(), self.w2.flatten(), self.b2.flatten()])
+        return np.concatenate([
+            self.w1.flatten(), self.b1.flatten(), 
+            self.w2.flatten(), self.b2.flatten(),
+            self.w3.flatten(), self.b3.flatten()
+        ])
 
     def set_weights(self, weights):
-        # 从扁平数组恢复权重
-        w1_end = self.input_size * self.hidden_size
-        self.w1 = weights[:w1_end].reshape(self.input_size, self.hidden_size)
+        idx = 0
         
-        b1_end = w1_end + self.hidden_size
-        self.b1 = weights[w1_end:b1_end]
+        # W1
+        size = self.input_size * self.hidden_size1
+        self.w1 = weights[idx:idx+size].reshape(self.input_size, self.hidden_size1)
+        idx += size
         
-        w2_end = b1_end + self.hidden_size * self.output_size
-        self.w2 = weights[b1_end:w2_end].reshape(self.hidden_size, self.output_size)
+        # B1
+        size = self.hidden_size1
+        self.b1 = weights[idx:idx+size]
+        idx += size
         
-        self.b2 = weights[w2_end:]
+        # W2
+        size = self.hidden_size1 * self.hidden_size2
+        self.w2 = weights[idx:idx+size].reshape(self.hidden_size1, self.hidden_size2)
+        idx += size
+        
+        # B2
+        size = self.hidden_size2
+        self.b2 = weights[idx:idx+size]
+        idx += size
+        
+        # W3
+        size = self.hidden_size2 * self.output_size
+        self.w3 = weights[idx:idx+size].reshape(self.hidden_size2, self.output_size)
+        idx += size
+        
+        # B3
+        self.b3 = weights[idx:]
 
     def mutate(self, rate=0.1, strength=0.5):
         weights = self.get_weights()
@@ -62,15 +93,19 @@ class GeneticAgent(Entity):
     def __init__(self, x, y, color, ax, maze_height, maze_width, brain=None):
         super().__init__(x, y, color, ax, maze_height, maze_width)
         self.last_move = (0, 0) # 记录上一步的移动方向
-        # 输入增加 2 维: 上一步的 dx, dy
-        input_size = 12 
-        hidden_size = 24 
+        
+        # 输入: 全局地图信息
+        # 每个格子 6 个特征: WallUp, WallDown, WallLeft, WallRight, IsPlayer, IsOpponent
+        # 加上 2 个全局特征: LastMoveX, LastMoveY
+        input_size = (maze_width * maze_height * 6) + 2
+        hidden_size1 = 128 
+        hidden_size2 = 64
         output_size = 5 
         
         if brain:
             self.brain = brain
         else:
-            self.brain = NeuralNetwork(input_size, hidden_size, output_size)
+            self.brain = NeuralNetwork(input_size, hidden_size1, hidden_size2, output_size)
 
     def move(self, dx, dy, grid_graph, opponents=None):
         old_x, old_y = self.x, self.y
@@ -84,40 +119,33 @@ class GeneticAgent(Entity):
 
     def get_state(self, grid_graph, opponent, opponent_bullet):
         w, h = self.maze_width, self.maze_height
+        state = []
         
-        # 相对位置
-        dx = (opponent.x - self.x) / w
-        dy = (opponent.y - self.y) / h
+        # 构建全局地图特征
+        for y in range(h):
+            for x in range(w):
+                neighbors = grid_graph.get((x, y), [])
+                # 1 表示有墙/有物体，0 表示空
+                # Wall Up
+                state.append(0 if (x, y-1) in neighbors else 1)
+                # Wall Down
+                state.append(0 if (x, y+1) in neighbors else 1)
+                # Wall Left
+                state.append(0 if (x-1, y) in neighbors else 1)
+                # Wall Right
+                state.append(0 if (x+1, y) in neighbors else 1)
+                
+                # Player Position
+                state.append(1 if x == self.x and y == self.y else 0)
+                
+                # Opponent Position
+                state.append(1 if x == opponent.x and y == opponent.y else 0)
         
-        # 危险感知 (敌方子弹相对位置)
-        b_dx = 0
-        b_dy = 0
-        if opponent_bullet and opponent_bullet.active:
-            b_dx = (opponent_bullet.x - self.x) / w
-            b_dy = (opponent_bullet.y - self.y) / h
+        # 添加记忆特征
+        state.append(self.last_move[0])
+        state.append(self.last_move[1])
         
-        # 墙壁检测
-        neighbors = grid_graph.get((self.x, self.y), [])
-        can_up = 1 if (self.x, self.y - 1) in neighbors else 0
-        can_down = 1 if (self.x, self.y + 1) in neighbors else 0
-        can_left = 1 if (self.x - 1, self.y) in neighbors else 0
-        can_right = 1 if (self.x + 1, self.y) in neighbors else 0
-        
-        state = np.array([
-            dx,
-            dy,
-            1 - can_up,   # Wall Up
-            1 - can_down, # Wall Down
-            1 - can_left, # Wall Left
-            1 - can_right,# Wall Right
-            1 if self.bullet and self.bullet.active else 0,
-            1 if opponent_bullet and opponent_bullet.active else 0,
-            b_dx,
-            b_dy,
-            self.last_move[0], # 上一步 X 方向
-            self.last_move[1]  # 上一步 Y 方向
-        ])
-        return state
+        return np.array(state)
 
     def decide(self, grid_graph, opponent, opponent_bullet):
         state = self.get_state(grid_graph, opponent, opponent_bullet)
@@ -242,13 +270,20 @@ import csv
 
 def train():
     POPULATION_SIZE = 100
-    GENERATIONS = 80 # 增加代数
-    WIDTH, HEIGHT = 10, 10 # 训练时用小一点的迷宫加快速度
+    GENERATIONS = 100 # 增加代数，因为网络更复杂了
+    WIDTH, HEIGHT = 10, 10 
     
-    # 初始化种群 (注意 hidden_size 必须与 GeneticAgent 中一致)
-    population = [NeuralNetwork(12, 24, 5) for _ in range(POPULATION_SIZE)]
+    # 计算输入维度: (W * H * 6) + 2
+    INPUT_SIZE = (WIDTH * HEIGHT * 6) + 2
+    HIDDEN1 = 128
+    HIDDEN2 = 64
+    OUTPUT = 5
+    
+    # 初始化种群
+    population = [NeuralNetwork(INPUT_SIZE, HIDDEN1, HIDDEN2, OUTPUT) for _ in range(POPULATION_SIZE)]
     
     print(f"开始训练... 种群大小: {POPULATION_SIZE}, 代数: {GENERATIONS}")
+    print(f"网络结构: Input={INPUT_SIZE} -> {HIDDEN1} -> {HIDDEN2} -> {OUTPUT}")
     
     # 打开 CSV 文件准备写入
     with open('training_results.csv', 'w', newline='') as csvfile:
@@ -287,9 +322,9 @@ def train():
             while len(new_population) < POPULATION_SIZE:
                 parent = random.choice(top_performers)
                 # 克隆并变异
-                child = NeuralNetwork(12, 24, 5)
+                child = NeuralNetwork(INPUT_SIZE, HIDDEN1, HIDDEN2, OUTPUT)
                 child.set_weights(parent.get_weights())
-                child.mutate(rate=0.2, strength=0.5)
+                child.mutate(rate=0.1, strength=0.2) # 降低变异强度，保护复杂结构
                 new_population.append(child)
                 
             population = new_population
@@ -348,7 +383,13 @@ if __name__ == "__main__":
         best_brain = train()
     else:
         print("正在加载模型...")
-        best_brain = NeuralNetwork(12, 24, 5)
+        # 必须与训练时的参数一致
+        WIDTH, HEIGHT = 10, 10
+        INPUT_SIZE = (WIDTH * HEIGHT * 6) + 2
+        HIDDEN1 = 128
+        HIDDEN2 = 64
+        OUTPUT = 5
+        best_brain = NeuralNetwork(INPUT_SIZE, HIDDEN1, HIDDEN2, OUTPUT)
         best_brain.load(MODEL_FILE)
     
     print("\n训练完成！正在展示最强个体的表现...")
