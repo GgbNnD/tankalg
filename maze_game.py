@@ -13,12 +13,14 @@ class Bullet:
         self.dy = dy
         self.active = True
         self.maze_height = maze_height
+        self.patch = None
         # 初始绘制
-        self.patch = patches.Circle(
-            (self.x + 0.5, self.maze_height - self.y - 0.5), 
-            0.15, color=color, zorder=20
-        )
-        ax.add_patch(self.patch)
+        if ax:
+            self.patch = patches.Circle(
+                (self.x + 0.5, self.maze_height - self.y - 0.5), 
+                0.15, color=color, zorder=20
+            )
+            ax.add_patch(self.patch)
 
     def move(self, grid_graph, opponents):
         if not self.active:
@@ -32,20 +34,21 @@ class Bullet:
         # 检查墙壁碰撞
         if (next_x, next_y) not in grid_graph.get((self.x, self.y), []):
             self.active = False
-            self.patch.set_visible(False)
+            if self.patch: self.patch.set_visible(False)
             return
 
         # 更新位置
         self.x = next_x
         self.y = next_y
-        self.patch.center = (self.x + 0.5, self.maze_height - self.y - 0.5)
+        if self.patch:
+            self.patch.center = (self.x + 0.5, self.maze_height - self.y - 0.5)
 
         # 检查击中对手
         for op in opponents:
             if op.alive and op.x == self.x and op.y == self.y:
                 op.die()
                 self.active = False
-                self.patch.set_visible(False)
+                if self.patch: self.patch.set_visible(False)
 
 class Entity:
     def __init__(self, x, y, color, ax, maze_height, maze_width):
@@ -58,14 +61,16 @@ class Entity:
         self.alive = True
         self.bullet = None
         self.facing = (1, 0) # 默认朝右
+        self.patch = None
         
         # 绘制正方形个体
-        # 逻辑坐标 (x, y) -> 绘图坐标 (x, height - y - 1) (左下角)
-        self.patch = patches.Rectangle(
-            (self.x + 0.2, self.maze_height - self.y - 0.8), 
-            0.6, 0.6, color=color, zorder=15
-        )
-        ax.add_patch(self.patch)
+        if ax:
+            # 逻辑坐标 (x, y) -> 绘图坐标 (x, height - y - 1) (左下角)
+            self.patch = patches.Rectangle(
+                (self.x + 0.2, self.maze_height - self.y - 0.8), 
+                0.6, 0.6, color=color, zorder=15
+            )
+            ax.add_patch(self.patch)
 
     def move(self, dx, dy, grid_graph, opponents=None):
         if not self.alive:
@@ -83,7 +88,8 @@ class Entity:
                         return
 
             self.x, self.y = nx, ny
-            self.patch.set_xy((self.x + 0.2, self.maze_height - self.y - 0.8))
+            if self.patch:
+                self.patch.set_xy((self.x + 0.2, self.maze_height - self.y - 0.8))
 
     def shoot(self):
         if not self.alive:
@@ -91,15 +97,16 @@ class Entity:
         # 只有当场上没有自己的子弹时才能发射
         if self.bullet is None or not self.bullet.active:
             # 移除旧的子弹图形（如果有）
-            if self.bullet:
+            if self.bullet and self.bullet.patch:
                 self.bullet.patch.remove()
             
             self.bullet = Bullet(self.x, self.y, self.facing[0], self.facing[1], self.color, self.ax, self.maze_height)
 
     def die(self):
         self.alive = False
-        self.patch.set_color('gray')
-        self.patch.set_alpha(0.5)
+        if self.patch:
+            self.patch.set_color('gray')
+            self.patch.set_alpha(0.5)
 
 class AI(Entity):
     def update(self, grid_graph, player, player_bullet):
