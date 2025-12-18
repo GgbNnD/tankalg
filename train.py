@@ -109,11 +109,21 @@ class MazeEnv:
 
     def reset(self):
         self.maze = HeadlessMazeGenerator(self.width, self.height)
-        self.maze.generate(algo='dfs') # Use DFS for training mazes
-        self.agent_pos = (0, 0)
-        self.goal_pos = (self.width - 1, self.height - 1)
+        # Randomize algorithm to make AI robust to different maze structures
+        algo = random.choice(['dfs', 'prim'])
+        self.maze.generate(algo=algo)
+        
+        # Randomize Start and Goal Positions
+        while True:
+            ax, ay = random.randint(0, self.width-1), random.randint(0, self.height-1)
+            gx, gy = random.randint(0, self.width-1), random.randint(0, self.height-1)
+            if (ax, ay) != (gx, gy):
+                self.agent_pos = (ax, ay)
+                self.goal_pos = (gx, gy)
+                break
+        
         self.visited_map = np.zeros((self.height, self.width), dtype=np.float32)
-        self.visited_map[0, 0] = 1.0
+        self.visited_map[self.agent_pos[1], self.agent_pos[0]] = 1.0
         return self.get_state()
 
     def get_state(self):

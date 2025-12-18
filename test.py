@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import os
 import time
+import random
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -76,12 +77,28 @@ def test_agent():
     maze.generate(algo='dfs', block=False)
     maze.title.set_text("DQN Agent Testing (CNN)")
 
-    # Setup Agent Visualization
-    agent_pos = (0, 0)
-    goal_pos = (WIDTH - 1, HEIGHT - 1)
+    # Randomize Start and Goal for testing
+    while True:
+        ax, ay = random.randint(0, WIDTH-1), random.randint(0, HEIGHT-1)
+        gx, gy = random.randint(0, WIDTH-1), random.randint(0, HEIGHT-1)
+        if (ax, ay) != (gx, gy):
+            agent_pos = (ax, ay)
+            goal_pos = (gx, gy)
+            break
+            
+    print(f"Test Start: {agent_pos}, Goal: {goal_pos}")
+
     visited_map = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
-    visited_map[0, 0] = 1.0
+    visited_map[agent_pos[1], agent_pos[0]] = 1.0
     
+    # Draw Goal (Red 'E' is default, but let's highlight our random goal)
+    # Clear default start/end text if needed, but for now just add new markers
+    goal_patch = plt.Circle(
+        (goal_pos[0] + 0.5, maze.height - goal_pos[1] - 0.5), 
+        0.3, color='red', zorder=19
+    )
+    maze.ax.add_patch(goal_patch)
+
     # Draw agent (Green Circle)
     agent_patch = plt.Circle(
         (agent_pos[0] + 0.5, maze.height - agent_pos[1] - 0.5), 

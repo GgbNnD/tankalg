@@ -376,3 +376,4 @@
 2025-12-18 23:44:32,684 - INFO - Training complete. Model saved to maze_dqn_model.pth
 2025-12-18 23:44:32,887 - INFO - Training rewards plot saved to training_rewards.png
 2025-12-18 23:44:58,578 - INFO - Running on device: cuda
+2025-12-18 23:51:29,659 - INFO - Running on device: cuda
