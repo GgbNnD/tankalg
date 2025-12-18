@@ -377,3 +377,222 @@
 2025-12-18 23:44:32,887 - INFO - Training rewards plot saved to training_rewards.png
 2025-12-18 23:44:58,578 - INFO - Running on device: cuda
 2025-12-18 23:51:29,659 - INFO - Running on device: cuda
+2025-12-18 23:56:55,202 - INFO - Running on device: cuda
+2025-12-18 23:56:55,871 - INFO - Starting training from episode 0...
+2025-12-18 23:56:56,503 - INFO - Episode 0, Total Reward: -161.30, Epsilon: 1.00, Steps: 226
+2025-12-18 23:56:56,584 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:57:25,483 - INFO - Episode 50, Total Reward: -128.70, Epsilon: 0.95, Steps: 200
+2025-12-18 23:57:25,559 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:57:52,591 - INFO - Episode 100, Total Reward: -242.70, Epsilon: 0.90, Steps: 300
+2025-12-18 23:57:52,662 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:58:17,001 - INFO - Episode 150, Total Reward: -71.00, Epsilon: 0.86, Steps: 111
+2025-12-18 23:58:17,077 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:58:41,163 - INFO - Episode 200, Total Reward: -38.10, Epsilon: 0.82, Steps: 89
+2025-12-18 23:58:41,285 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:59:08,711 - INFO - Episode 250, Total Reward: -236.20, Epsilon: 0.78, Steps: 300
+2025-12-18 23:59:08,826 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-18 23:59:37,631 - INFO - Episode 300, Total Reward: -185.30, Epsilon: 0.74, Steps: 264
+2025-12-18 23:59:37,780 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:00:03,657 - INFO - Episode 350, Total Reward: -252.50, Epsilon: 0.70, Steps: 300
+2025-12-19 00:00:03,737 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:00:29,979 - INFO - Episode 400, Total Reward: -242.60, Epsilon: 0.67, Steps: 300
+2025-12-19 00:00:30,105 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:00:57,133 - INFO - Episode 450, Total Reward: -223.10, Epsilon: 0.64, Steps: 300
+2025-12-19 00:00:57,212 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:01:23,944 - INFO - Episode 500, Total Reward: -239.70, Epsilon: 0.61, Steps: 300
+2025-12-19 00:01:24,098 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:01:46,980 - INFO - Episode 550, Total Reward: 19.00, Epsilon: 0.58, Steps: 2
+2025-12-19 00:01:47,099 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:02:10,981 - INFO - Episode 600, Total Reward: 12.40, Epsilon: 0.55, Steps: 18
+2025-12-19 00:02:11,090 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:02:37,249 - INFO - Episode 650, Total Reward: -208.10, Epsilon: 0.52, Steps: 300
+2025-12-19 00:02:37,374 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:02:59,349 - INFO - Episode 700, Total Reward: -232.00, Epsilon: 0.50, Steps: 300
+2025-12-19 00:02:59,472 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:03:24,090 - INFO - Episode 750, Total Reward: -230.30, Epsilon: 0.47, Steps: 300
+2025-12-19 00:03:24,218 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:03:47,391 - INFO - Episode 800, Total Reward: -83.80, Epsilon: 0.45, Steps: 181
+2025-12-19 00:03:47,516 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:04:13,660 - INFO - Episode 850, Total Reward: -274.70, Epsilon: 0.43, Steps: 300
+2025-12-19 00:04:13,757 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:04:40,941 - INFO - Episode 900, Total Reward: -259.60, Epsilon: 0.41, Steps: 300
+2025-12-19 00:04:41,023 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:05:07,819 - INFO - Episode 950, Total Reward: -201.60, Epsilon: 0.39, Steps: 300
+2025-12-19 00:05:07,943 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:05:32,213 - INFO - Episode 1000, Total Reward: -234.30, Epsilon: 0.37, Steps: 300
+2025-12-19 00:05:32,312 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:05:57,640 - INFO - Episode 1050, Total Reward: -227.70, Epsilon: 0.35, Steps: 300
+2025-12-19 00:05:57,705 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:06:18,194 - INFO - Episode 1100, Total Reward: -212.10, Epsilon: 0.33, Steps: 300
+2025-12-19 00:06:18,343 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:06:43,753 - INFO - Episode 1150, Total Reward: -22.40, Epsilon: 0.32, Steps: 76
+2025-12-19 00:06:43,908 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:07:04,762 - INFO - Episode 1200, Total Reward: -43.70, Epsilon: 0.30, Steps: 105
+2025-12-19 00:07:04,856 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:07:27,332 - INFO - Episode 1250, Total Reward: -235.00, Epsilon: 0.29, Steps: 300
+2025-12-19 00:07:27,448 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:07:50,194 - INFO - Episode 1300, Total Reward: -255.40, Epsilon: 0.27, Steps: 300
+2025-12-19 00:07:50,311 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:08:14,565 - INFO - Episode 1350, Total Reward: -182.70, Epsilon: 0.26, Steps: 300
+2025-12-19 00:08:14,718 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:08:39,002 - INFO - Episode 1400, Total Reward: -115.20, Epsilon: 0.25, Steps: 216
+2025-12-19 00:08:39,157 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:09:01,306 - INFO - Episode 1450, Total Reward: -47.60, Epsilon: 0.23, Steps: 113
+2025-12-19 00:09:01,396 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:09:24,055 - INFO - Episode 1500, Total Reward: -245.80, Epsilon: 0.22, Steps: 300
+2025-12-19 00:09:24,180 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:09:49,803 - INFO - Episode 1550, Total Reward: -131.70, Epsilon: 0.21, Steps: 227
+2025-12-19 00:09:49,891 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:10:11,138 - INFO - Episode 1600, Total Reward: -86.10, Epsilon: 0.20, Steps: 150
+2025-12-19 00:10:11,212 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:10:35,795 - INFO - Episode 1650, Total Reward: -236.60, Epsilon: 0.19, Steps: 300
+2025-12-19 00:10:35,940 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:10:58,395 - INFO - Episode 1700, Total Reward: 20.40, Epsilon: 0.18, Steps: 7
+2025-12-19 00:10:58,511 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:11:21,646 - INFO - Episode 1750, Total Reward: -259.90, Epsilon: 0.17, Steps: 300
+2025-12-19 00:11:21,767 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:11:43,966 - INFO - Episode 1800, Total Reward: -127.90, Epsilon: 0.16, Steps: 225
+2025-12-19 00:11:44,088 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:12:01,328 - INFO - Episode 1850, Total Reward: -258.20, Epsilon: 0.16, Steps: 300
+2025-12-19 00:12:01,415 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:12:21,178 - INFO - Episode 1900, Total Reward: 22.00, Epsilon: 0.15, Steps: 8
+2025-12-19 00:12:21,257 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:12:47,735 - INFO - Episode 1950, Total Reward: -28.30, Epsilon: 0.14, Steps: 82
+2025-12-19 00:12:47,829 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:13:10,955 - INFO - Episode 2000, Total Reward: -242.10, Epsilon: 0.14, Steps: 300
+2025-12-19 00:13:11,068 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:13:34,422 - INFO - Episode 2050, Total Reward: -231.50, Epsilon: 0.13, Steps: 300
+2025-12-19 00:13:34,511 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:13:57,169 - INFO - Episode 2100, Total Reward: -220.20, Epsilon: 0.12, Steps: 300
+2025-12-19 00:13:57,325 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:14:19,206 - INFO - Episode 2150, Total Reward: -274.90, Epsilon: 0.12, Steps: 300
+2025-12-19 00:14:19,361 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:14:44,772 - INFO - Episode 2200, Total Reward: -236.50, Epsilon: 0.11, Steps: 300
+2025-12-19 00:14:44,927 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:15:07,660 - INFO - Episode 2250, Total Reward: -190.90, Epsilon: 0.11, Steps: 270
+2025-12-19 00:15:07,735 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:15:25,523 - INFO - Episode 2300, Total Reward: -3.60, Epsilon: 0.10, Steps: 54
+2025-12-19 00:15:25,678 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:15:46,882 - INFO - Episode 2350, Total Reward: 21.00, Epsilon: 0.10, Steps: 3
+2025-12-19 00:15:47,001 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:16:08,619 - INFO - Episode 2400, Total Reward: -53.50, Epsilon: 0.10, Steps: 103
+2025-12-19 00:16:08,738 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:16:31,560 - INFO - Episode 2450, Total Reward: -4.50, Epsilon: 0.10, Steps: 39
+2025-12-19 00:16:31,715 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:16:49,879 - INFO - Episode 2500, Total Reward: -130.00, Epsilon: 0.10, Steps: 219
+2025-12-19 00:16:50,038 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:17:11,959 - INFO - Episode 2550, Total Reward: 23.00, Epsilon: 0.10, Steps: 7
+2025-12-19 00:17:12,089 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:17:36,652 - INFO - Episode 2600, Total Reward: 24.00, Epsilon: 0.10, Steps: 21
+2025-12-19 00:17:36,727 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:17:53,175 - INFO - Episode 2650, Total Reward: 24.00, Epsilon: 0.10, Steps: 9
+2025-12-19 00:17:53,274 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:18:12,177 - INFO - Episode 2700, Total Reward: -275.70, Epsilon: 0.10, Steps: 300
+2025-12-19 00:18:12,299 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:18:29,779 - INFO - Episode 2750, Total Reward: -183.80, Epsilon: 0.10, Steps: 241
+2025-12-19 00:18:29,908 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:18:52,315 - INFO - Episode 2800, Total Reward: -239.90, Epsilon: 0.10, Steps: 300
+2025-12-19 00:18:52,405 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:19:14,188 - INFO - Episode 2850, Total Reward: -212.50, Epsilon: 0.10, Steps: 300
+2025-12-19 00:19:14,308 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:19:33,632 - INFO - Episode 2900, Total Reward: 19.40, Epsilon: 0.10, Steps: 18
+2025-12-19 00:19:33,792 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:19:55,448 - INFO - Episode 2950, Total Reward: -241.70, Epsilon: 0.10, Steps: 300
+2025-12-19 00:19:55,568 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:20:14,222 - INFO - Episode 3000, Total Reward: 25.50, Epsilon: 0.10, Steps: 12
+2025-12-19 00:20:14,376 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:20:36,126 - INFO - Episode 3050, Total Reward: -260.60, Epsilon: 0.10, Steps: 300
+2025-12-19 00:20:36,223 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:20:58,720 - INFO - Episode 3100, Total Reward: 23.00, Epsilon: 0.10, Steps: 10
+2025-12-19 00:20:58,814 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:21:19,852 - INFO - Episode 3150, Total Reward: -113.50, Epsilon: 0.10, Steps: 187
+2025-12-19 00:21:19,968 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:21:38,422 - INFO - Episode 3200, Total Reward: -132.20, Epsilon: 0.10, Steps: 229
+2025-12-19 00:21:38,536 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:21:58,216 - INFO - Episode 3250, Total Reward: -269.40, Epsilon: 0.10, Steps: 300
+2025-12-19 00:21:58,340 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:22:18,313 - INFO - Episode 3300, Total Reward: -234.30, Epsilon: 0.10, Steps: 300
+2025-12-19 00:22:18,435 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:22:39,032 - INFO - Episode 3350, Total Reward: -118.20, Epsilon: 0.10, Steps: 171
+2025-12-19 00:22:39,186 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:23:00,197 - INFO - Episode 3400, Total Reward: -276.80, Epsilon: 0.10, Steps: 300
+2025-12-19 00:23:00,286 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:23:20,695 - INFO - Episode 3450, Total Reward: -14.40, Epsilon: 0.10, Steps: 69
+2025-12-19 00:23:20,768 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:23:36,794 - INFO - Episode 3500, Total Reward: -252.20, Epsilon: 0.10, Steps: 300
+2025-12-19 00:23:36,882 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:23:55,709 - INFO - Episode 3550, Total Reward: 22.50, Epsilon: 0.10, Steps: 6
+2025-12-19 00:23:55,781 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:24:13,969 - INFO - Episode 3600, Total Reward: 31.00, Epsilon: 0.10, Steps: 23
+2025-12-19 00:24:14,038 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:24:35,761 - INFO - Episode 3650, Total Reward: 21.70, Epsilon: 0.10, Steps: 7
+2025-12-19 00:24:35,901 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:24:56,872 - INFO - Episode 3700, Total Reward: 25.50, Epsilon: 0.10, Steps: 18
+2025-12-19 00:24:56,976 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:25:19,576 - INFO - Episode 3750, Total Reward: -254.80, Epsilon: 0.10, Steps: 300
+2025-12-19 00:25:19,652 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:25:40,471 - INFO - Episode 3800, Total Reward: -243.00, Epsilon: 0.10, Steps: 300
+2025-12-19 00:25:40,541 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:25:57,409 - INFO - Episode 3850, Total Reward: -228.70, Epsilon: 0.10, Steps: 300
+2025-12-19 00:25:57,508 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:26:20,184 - INFO - Episode 3900, Total Reward: -225.90, Epsilon: 0.10, Steps: 300
+2025-12-19 00:26:20,324 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:26:39,069 - INFO - Episode 3950, Total Reward: -8.30, Epsilon: 0.10, Steps: 69
+2025-12-19 00:26:39,172 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:26:56,111 - INFO - Episode 4000, Total Reward: -264.70, Epsilon: 0.10, Steps: 300
+2025-12-19 00:26:56,203 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:27:11,285 - INFO - Episode 4050, Total Reward: 20.00, Epsilon: 0.10, Steps: 1
+2025-12-19 00:27:11,413 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:27:30,996 - INFO - Episode 4100, Total Reward: -227.30, Epsilon: 0.10, Steps: 300
+2025-12-19 00:27:31,134 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:27:51,983 - INFO - Episode 4150, Total Reward: -224.30, Epsilon: 0.10, Steps: 300
+2025-12-19 00:27:52,115 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:28:11,133 - INFO - Episode 4200, Total Reward: 23.50, Epsilon: 0.10, Steps: 26
+2025-12-19 00:28:11,260 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:28:30,885 - INFO - Episode 4250, Total Reward: 26.00, Epsilon: 0.10, Steps: 13
+2025-12-19 00:28:31,005 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:28:48,786 - INFO - Episode 4300, Total Reward: -242.00, Epsilon: 0.10, Steps: 300
+2025-12-19 00:28:48,863 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:29:05,813 - INFO - Episode 4350, Total Reward: -247.30, Epsilon: 0.10, Steps: 300
+2025-12-19 00:29:05,947 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:29:22,793 - INFO - Episode 4400, Total Reward: 14.20, Epsilon: 0.10, Steps: 52
+2025-12-19 00:29:22,879 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:29:43,375 - INFO - Episode 4450, Total Reward: 37.00, Epsilon: 0.10, Steps: 38
+2025-12-19 00:29:43,446 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:30:00,885 - INFO - Episode 4500, Total Reward: -4.40, Epsilon: 0.10, Steps: 62
+2025-12-19 00:30:00,976 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:30:21,722 - INFO - Episode 4550, Total Reward: -245.20, Epsilon: 0.10, Steps: 300
+2025-12-19 00:30:21,850 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:30:38,528 - INFO - Episode 4600, Total Reward: 21.00, Epsilon: 0.10, Steps: 3
+2025-12-19 00:30:38,612 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:30:53,475 - INFO - Episode 4650, Total Reward: 20.40, Epsilon: 0.10, Steps: 7
+2025-12-19 00:30:53,573 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:31:10,175 - INFO - Episode 4700, Total Reward: 23.00, Epsilon: 0.10, Steps: 7
+2025-12-19 00:31:10,262 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:31:27,956 - INFO - Episode 4750, Total Reward: 20.00, Epsilon: 0.10, Steps: 7
+2025-12-19 00:31:28,078 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:31:48,609 - INFO - Episode 4800, Total Reward: -223.60, Epsilon: 0.10, Steps: 300
+2025-12-19 00:31:48,687 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:32:07,195 - INFO - Episode 4850, Total Reward: -268.10, Epsilon: 0.10, Steps: 300
+2025-12-19 00:32:07,278 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:32:24,060 - INFO - Episode 4900, Total Reward: -236.20, Epsilon: 0.10, Steps: 300
+2025-12-19 00:32:24,146 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:32:46,187 - INFO - Episode 4950, Total Reward: 18.90, Epsilon: 0.10, Steps: 36
+2025-12-19 00:32:46,311 - INFO - Checkpoint saved to checkpoint.pth
+2025-12-19 00:33:04,942 - INFO - Training complete. Model saved to maze_dqn_model.pth
+2025-12-19 00:33:05,163 - INFO - Training rewards plot saved to training_rewards.png
+2025-12-19 00:33:24,295 - INFO - Running on device: cuda
+2025-12-19 00:33:42,639 - INFO - Running on device: cuda
+2025-12-19 00:34:08,573 - INFO - Running on device: cuda
+2025-12-19 00:34:26,983 - INFO - Running on device: cuda
+2025-12-19 00:34:43,583 - INFO - Running on device: cuda
+2025-12-19 00:35:23,182 - INFO - Running on device: cuda
+2025-12-19 00:36:56,266 - INFO - Running on device: cuda
+2025-12-19 00:37:47,889 - INFO - Running on device: cuda
+2025-12-19 00:37:59,137 - INFO - Running on device: cuda
+2025-12-19 00:38:09,860 - INFO - Running on device: cuda
+2025-12-19 00:38:28,042 - INFO - Running on device: cuda
+2025-12-19 00:38:39,805 - INFO - Running on device: cuda
+2025-12-19 00:38:50,211 - INFO - Running on device: cuda
+2025-12-19 00:38:59,706 - INFO - Running on device: cuda
+2025-12-19 00:39:15,093 - INFO - Running on device: cuda
