@@ -3,91 +3,67 @@ import random
 import matplotlib.pyplot as plt
 from maze_generator import MazeGenerator
 from maze_game import Entity, AI, MazeGame
+import torch
+import torch.nn as nn
+from tqdm import tqdm
 
 import os
 
-class NeuralNetwork:
+class NeuralNetwork(nn.Module):
     def __init__(self, input_size, hidden_size1, hidden_size2, output_size):
+        super(NeuralNetwork, self).__init__()
         self.input_size = input_size
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2
         self.output_size = output_size
         
-        # 初始化权重 (使用标准正态分布)
-        self.w1 = np.random.randn(input_size, hidden_size1) * np.sqrt(2/input_size)
-        self.b1 = np.zeros(hidden_size1)
-        self.w2 = np.random.randn(hidden_size1, hidden_size2) * np.sqrt(2/hidden_size1)
-        self.b2 = np.zeros(hidden_size2)
-        self.w3 = np.random.randn(hidden_size2, output_size) * np.sqrt(2/hidden_size2)
-        self.b3 = np.zeros(output_size)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        self.net = nn.Sequential(
+            nn.Linear(input_size, hidden_size1),
+            nn.ReLU(),
+            nn.Linear(hidden_size1, hidden_size2),
+            nn.ReLU(),
+            nn.Linear(hidden_size2, output_size)
+        ).to(self.device)
 
     def forward(self, x):
-        # 前向传播 (使用 ReLU 激活函数，最后一层不激活)
-        self.z1 = np.dot(x, self.w1) + self.b1
-        self.a1 = np.maximum(0, self.z1) # ReLU
-        
-        self.z2 = np.dot(self.a1, self.w2) + self.b2
-        self.a2 = np.maximum(0, self.z2) # ReLU
-        
-        self.z3 = np.dot(self.a2, self.w3) + self.b3
-        return self.z3 # Logits
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x).float().to(self.device)
+        elif isinstance(x, list):
+            x = torch.tensor(x).float().to(self.device)
+            
+        with torch.no_grad():
+            output = self.net(x)
+            
+        return output.cpu().numpy()
 
     def save(self, filename):
-        np.savez(filename, w1=self.w1, b1=self.b1, w2=self.w2, b2=self.b2, w3=self.w3, b3=self.b3)
+        torch.save(self.state_dict(), filename)
         
     def load(self, filename):
-        data = np.load(filename)
-        self.w1 = data['w1']
-        self.b1 = data['b1']
-        self.w2 = data['w2']
-        self.b2 = data['b2']
-        self.w3 = data['w3']
-        self.b3 = data['b3']
+        self.load_state_dict(torch.load(filename, map_location=self.device))
 
     def get_weights(self):
-        return np.concatenate([
-            self.w1.flatten(), self.b1.flatten(), 
-            self.w2.flatten(), self.b2.flatten(),
-            self.w3.flatten(), self.b3.flatten()
-        ])
+        params = []
+        for param in self.net.parameters():
+            params.append(param.view(-1))
+        return torch.cat(params).cpu().detach().numpy()
 
     def set_weights(self, weights):
+        weights_torch = torch.from_numpy(weights).to(self.device)
         idx = 0
-        
-        # W1
-        size = self.input_size * self.hidden_size1
-        self.w1 = weights[idx:idx+size].reshape(self.input_size, self.hidden_size1)
-        idx += size
-        
-        # B1
-        size = self.hidden_size1
-        self.b1 = weights[idx:idx+size]
-        idx += size
-        
-        # W2
-        size = self.hidden_size1 * self.hidden_size2
-        self.w2 = weights[idx:idx+size].reshape(self.hidden_size1, self.hidden_size2)
-        idx += size
-        
-        # B2
-        size = self.hidden_size2
-        self.b2 = weights[idx:idx+size]
-        idx += size
-        
-        # W3
-        size = self.hidden_size2 * self.output_size
-        self.w3 = weights[idx:idx+size].reshape(self.hidden_size2, self.output_size)
-        idx += size
-        
-        # B3
-        self.b3 = weights[idx:]
+        for param in self.net.parameters():
+            num_param = param.numel()
+            param.data.copy_(weights_torch[idx:idx+num_param].view(param.size()))
+            idx += num_param
 
     def mutate(self, rate=0.1, strength=0.5):
-        weights = self.get_weights()
-        mask = np.random.random(weights.shape) < rate
-        noise = np.random.randn(weights.shape[0]) * strength
-        weights[mask] += noise[mask]
-        self.set_weights(weights)
+        with torch.no_grad():
+            for param in self.net.parameters():
+                mask = torch.rand_like(param) < rate
+                noise = torch.randn_like(param) * strength
+                param[mask] += noise[mask]
 
 class GeneticAgent(Entity):
     def __init__(self, x, y, color, ax, maze_height, maze_width, brain=None):
@@ -98,8 +74,8 @@ class GeneticAgent(Entity):
         # 每个格子 6 个特征: WallUp, WallDown, WallLeft, WallRight, IsPlayer, IsOpponent
         # 加上 2 个全局特征: LastMoveX, LastMoveY
         input_size = (maze_width * maze_height * 6) + 2
-        hidden_size1 = 128 
-        hidden_size2 = 64
+        hidden_size1 = 512 
+        hidden_size2 = 256
         output_size = 5 
         
         if brain:
@@ -271,12 +247,12 @@ import csv
 def train():
     POPULATION_SIZE = 100
     GENERATIONS = 100 # 增加代数，因为网络更复杂了
-    WIDTH, HEIGHT = 10, 10 
+    WIDTH, HEIGHT = 5, 5
     
     # 计算输入维度: (W * H * 6) + 2
     INPUT_SIZE = (WIDTH * HEIGHT * 6) + 2
-    HIDDEN1 = 128
-    HIDDEN2 = 64
+    HIDDEN1 = 512
+    HIDDEN2 = 256
     OUTPUT = 5
     
     # 初始化种群
@@ -290,7 +266,7 @@ def train():
         writer = csv.writer(csvfile)
         writer.writerow(['Generation', 'Best Fitness', 'Average Fitness'])
 
-        for gen in range(GENERATIONS):
+        for gen in tqdm(range(GENERATIONS), desc="Training"):
             scores = []
             for i, brain in enumerate(population):
                 # 每个个体玩 3 局取平均分，减少随机性
@@ -308,7 +284,7 @@ def train():
             scores.sort(key=lambda x: x[0], reverse=True)
             best_score = scores[0][0]
             
-            print(f"Generation {gen+1}: Best Fitness = {best_score:.2f}, Avg Fitness = {avg_fitness:.2f}")
+            tqdm.write(f"Generation {gen+1}: Best Fitness = {best_score:.2f}, Avg Fitness = {avg_fitness:.2f}")
             writer.writerow([gen+1, best_score, avg_fitness])
             
             # 优胜劣汰
@@ -330,8 +306,8 @@ def train():
             population = new_population
 
     # 保存最好的模型
-    print("保存最佳模型到 best_model.npz")
-    scores[0][1].save("best_model.npz")
+    print("保存最佳模型到 best_model.pth")
+    scores[0][1].save("best_model.pth")
 
     return scores[0][1] # 返回最好的大脑
 
@@ -366,7 +342,7 @@ class VisualGameWithAgent(MazeGame):
         super().update()
 
 if __name__ == "__main__":
-    MODEL_FILE = "best_model.npz"
+    MODEL_FILE = "best_model.pth"
     TRAIN_MODE = True # 设置为 False 可以直接加载模型跳过训练
     
     # 检查是否存在模型文件
@@ -384,10 +360,10 @@ if __name__ == "__main__":
     else:
         print("正在加载模型...")
         # 必须与训练时的参数一致
-        WIDTH, HEIGHT = 10, 10
+        WIDTH, HEIGHT = 5, 5
         INPUT_SIZE = (WIDTH * HEIGHT * 6) + 2
-        HIDDEN1 = 128
-        HIDDEN2 = 64
+        HIDDEN1 = 512
+        HIDDEN2 = 256
         OUTPUT = 5
         best_brain = NeuralNetwork(INPUT_SIZE, HIDDEN1, HIDDEN2, OUTPUT)
         best_brain.load(MODEL_FILE)
