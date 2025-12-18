@@ -19,12 +19,12 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     # Hyperparameters
     POPULATION_SIZE = 100
     GENERATIONS = 200
-    GAMES_PER_GEN = 2 # Play 5 games against random opponent
+    GAMES_PER_GEN = 3  # Play 3 games for better evaluation
     
-    INPUT_SIZE = 20
-    HIDDEN_SIZE_1 = 64
-    HIDDEN_SIZE_2 = 32
-    OUTPUT_SIZE = 3
+    INPUT_SIZE = 14  # Simplified input (position, enemy, walls, bullets)
+    HIDDEN_SIZE_1 = 32  # Reduced due to simpler control
+    HIDDEN_SIZE_2 = 16
+    OUTPUT_SIZE = 3  # [move_x, move_y, shoot] - 4-direction movement + shoot
     
     # Load opponent weights if provided
     opponent_weights = None
@@ -163,9 +163,9 @@ def train(resume_path=None, log_file="training_log.jsonl", opponent_path=None):
     print("Training complete!")
 
 def watch_game(model_path="best_ai_final.pkl", opponent_path=None):
-    INPUT_SIZE = 20
-    HIDDEN_SIZE_1 = 256
-    HIDDEN_SIZE_2 = 64
+    INPUT_SIZE = 14
+    HIDDEN_SIZE_1 = 32
+    HIDDEN_SIZE_2 = 16
     OUTPUT_SIZE = 3
     
     # Use CPU for watching

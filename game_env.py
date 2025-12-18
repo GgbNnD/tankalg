@@ -100,7 +100,9 @@ class TankGame:
         return [self.get_state(i) for i in range(self.num_players)]
 
     def step(self, actions):
-        # Actions: List of [move, turn, shoot] for each player
+        # Actions: List of [move_direction, shoot] for each player
+        # move_direction encoded as: 0=Up, 1=Down, 2=Left, 3=Right
+        # We decode from 2 continuous outputs: argmax of softmax-like interpretation
         
         rewards = [0] * self.num_players
         infos = [{"hit": 0, "suicide": 0, "dead": 0, "win": 0} for _ in range(self.num_players)]
@@ -111,22 +113,56 @@ class TankGame:
             
             act = actions[i]
             
-            # Movement
-            if act[0] > 0.3: ply.move_mode = player.Player.FORWARD
-            elif act[0] < -0.3: ply.move_mode = player.Player.BACK
-            else: ply.move_mode = 0
+            # Decode 4-direction movement from 2 outputs
+            # Output: [val1, val2]
+            # Mapping: (val1 > 0, val2 > 0) -> quadrant -> direction
+            # Simpler: Use sign of each value
+            # val1: positive=Right, negative=Left
+            # val2: positive=Down, negative=Up
             
-            # Turning
-            if act[1] > 0.3: ply.turn_mode = player.Player.RIGHT
-            elif act[1] < -0.3: ply.turn_mode = player.Player.LEFT
-            else: ply.turn_mode = 0
+            # Determine dominant direction
+            val1, val2 = act[0], act[1]
             
-            # Shooting
-            if act[2] > 0.5:
+            # Threshold to activate movement
+            threshold = 0.3
+            
+            # Priority: strongest signal wins
+            abs_vals = [abs(val2), abs(val2), abs(val1), abs(val1)]
+            dirs = [-val2, val2, -val1, val1]  # Up, Down, Left, Right
+            
+            # Find direction with strongest activation
+            max_idx = 0
+            max_val = abs(val2) if val2 < -threshold else 0  # Up
+            
+            if val2 > threshold and abs(val2) > max_val:  # Down
+                max_idx = 1
+                max_val = abs(val2)
+            if val1 < -threshold and abs(val1) > max_val:  # Left
+                max_idx = 2
+                max_val = abs(val1)
+            if val1 > threshold and abs(val1) > max_val:  # Right
+                max_idx = 3
+                max_val = abs(val1)
+            
+            # Apply movement and rotation
+            # Directions: 0=Up(-y,angle=270), 1=Down(+y,angle=90), 2=Left(-x,angle=180), 3=Right(+x,angle=0)
+            direction_angles = [3*math.pi/2, math.pi/2, math.pi, 0]
+            
+            if max_val > 0:
+                target_angle = direction_angles[max_idx]
+                ply.angle = target_angle
+                ply.move_mode = player.Player.FORWARD
+            else:
+                ply.move_mode = 0
+            
+            ply.turn_mode = 0  # No separate turning in this simplified model
+            
+            # Shooting (3rd output)
+            if len(act) > 2 and act[2] > 0.5:
                 newb = ply.add_bullet()
                 if newb:
                     self.effect_bullets.append(newb)
-                    rewards[i] -= 0.002 # Very small penalty for shooting
+                    rewards[i] -= 0.002  # Small penalty for shooting
         
         # Update bullets
         for b in self.effect_bullets.copy():
@@ -177,7 +213,20 @@ class TankGame:
         for i, ply in enumerate(self.players):
             if not self.finished_players[i] and ply.lives > 0:
                 active_count += 1
+                
+                # Store previous position to detect wall collisions
+                prev_pos = ply.position
+                
                 ply.update(self.game_map)
+                
+                # Check for wall collision/obstruction
+                # If we tried to move but didn't move much, we hit a wall
+                if ply.move_mode != 0:
+                    dist_moved = abs(ply.position - prev_pos)
+                    # MOVESPEED is usually around 3-5 pixels per frame
+                    # If we moved less than half the speed, we probably hit something
+                    if dist_moved < ply.MOVESPEED * 0.5:
+                        rewards[i] -= 0.05 # Penalty for hitting wall
                 
                 # Time penalty to encourage action
                 rewards[i] -= 0.001
@@ -213,28 +262,25 @@ class TankGame:
     def get_state(self, player_idx):
         # If finished, return zeros
         if self.finished_players[player_idx]:
-            return np.zeros(20)
+            return np.zeros(14)
 
         # Construct feature vector
         me = self.players[player_idx]
         
         if me.lives <= 0:
-            return np.zeros(20) # Dead state
+            return np.zeros(14) # Dead state
             
         # Normalize positions
         norm_x = self.width
         norm_y = self.height
         
-        # 1. Self State (4)
+        # 1. Self Position (2)
         state = [
             me.position.real / norm_x,
-            me.position.imag / norm_y,
-            math.sin(me.angle),
-            math.cos(me.angle)
+            me.position.imag / norm_y
         ]
         
-        # 2. Enemy State (4) - Find nearest opponent
-        # For 1v1, it's just the other player
+        # 2. Enemy Relative Position (2) - Find nearest opponent
         enemy = None
         min_dist = float('inf')
         
@@ -249,17 +295,18 @@ class TankGame:
             rel_pos = enemy.position - me.position
             state.extend([
                 rel_pos.real / norm_x,
-                rel_pos.imag / norm_y,
-                math.sin(enemy.angle),
-                math.cos(enemy.angle)
+                rel_pos.imag / norm_y
             ])
         else:
             # No enemy alive
-            state.extend([0, 0, 0, 0])
+            state.extend([0, 0])
             
-        # 3. Bullet State (4) - Nearest bullet
-        # Find nearest bullet (that is not mine? or any bullet?)
-        # Any bullet is dangerous.
+        # 3. Wall distances in 4 cardinal directions (4)
+        # Up, Down, Left, Right
+        wall_dists = self.get_wall_distances(me.position)
+        state.extend(wall_dists)
+        
+        # 4. Nearest Enemy Bullet (4) - position + velocity
         nearest_b = None
         min_b_dist = float('inf')
         
@@ -275,26 +322,82 @@ class TankGame:
                 
         if nearest_b:
             rel_b_pos = nearest_b.position - me.position
-            # Velocity is speed * complex(cos, sin)
-            # Bullet speed is constant usually.
-            # Let's just use relative position and maybe velocity vector
             vx = bullet.Bullet.SPEED * math.cos(nearest_b.angle)
             vy = bullet.Bullet.SPEED * math.sin(nearest_b.angle)
             
             state.extend([
                 rel_b_pos.real / norm_x,
                 rel_b_pos.imag / norm_y,
-                vx / bullet.Bullet.SPEED, # Normalize direction
+                vx / bullet.Bullet.SPEED,
                 vy / bullet.Bullet.SPEED
             ])
         else:
             state.extend([0, 0, 0, 0])
         
-        # 4. Wall Raycasts (8 directions) (8)
-        rays = self.cast_rays(me.position, me.angle)
-        state.extend(rays)
+        # 5. Ammo count (2) - self and enemy
+        state.append(me.bullets / 5.0)  # Normalize by max bullets
+        
+        enemy_bullets = 0
+        if enemy:
+            enemy_bullets = enemy.bullets / 5.0
+        state.append(enemy_bullets)
         
         return np.array(state)
+
+    def get_wall_distances(self, pos, max_dist=500):
+        """Get distances to walls in 4 cardinal directions (Up, Down, Left, Right)"""
+        # Directions: Up(-y), Down(+y), Left(-x), Right(+x)
+        directions = [
+            (0, -1),   # Up
+            (0, 1),    # Down
+            (-1, 0),   # Left
+            (1, 0)     # Right
+        ]
+        
+        distances = []
+        
+        for dx, dy in directions:
+            ray_dir = complex(dx, dy)
+            ray_end = pos + ray_dir * max_dist
+            
+            closest_dist = max_dist
+            
+            # Convert map walls to lines
+            all_lines = []
+            for w in self.game_map.walls:
+                c, r, t = w
+                x = c * SQSIZE + self.game_map.startx
+                y = r * SQSIZE + self.game_map.starty
+                if t == -1:  # Horizontal
+                    all_lines.append(((x, y), (x + SQSIZE + WALLWIDTH, y)))
+                elif t == 1:  # Vertical
+                    all_lines.append(((x, y), (x, y + SQSIZE + WALLWIDTH)))
+            
+            # Ray as a line
+            x1, y1 = pos.real, pos.imag
+            x2, y2 = ray_end.real, ray_end.imag
+            
+            for line in all_lines:
+                x3, y3 = line[0]
+                x4, y4 = line[1]
+                
+                # Line intersection formula
+                denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1)
+                if abs(denom) < 1e-6: continue
+                
+                ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom
+                ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom
+                
+                if 0 <= ua <= 1 and 0 <= ub <= 1:
+                    int_x = x1 + ua * (x2 - x1)
+                    int_y = y1 + ua * (y2 - y1)
+                    d = math.sqrt((int_x - x1)**2 + (int_y - y1)**2)
+                    if d < closest_dist:
+                        closest_dist = d
+            
+            distances.append(closest_dist / max_dist)
+        
+        return distances
 
     def cast_rays(self, pos, angle, num_rays=8, max_dist=500):
         distances = []
