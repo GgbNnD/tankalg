@@ -223,15 +223,15 @@ def load_checkpoint(filename, model, optimizer):
 def train(resume=False):
     # Hyperparameters
     WIDTH, HEIGHT = 10, 10
-    EPISODES = 5000 # Increased episodes for better convergence
-    BATCH_SIZE = 64
-    GAMMA = 0.90 # Lower gamma to prioritize immediate penalties (avoiding walls/loops)
+    EPISODES = 10000 
+    BATCH_SIZE = 128 # Increased batch size for smoother gradients
+    GAMMA = 0.95 # Slightly increased to look a bit further ahead
     EPSILON_START = 1.0
-    EPSILON_END = 0.1
-    EPSILON_DECAY = 0.999 
-    LR = 0.0001 # Lower LR for stability
-    TARGET_UPDATE = 100
-    MEMORY_SIZE = 20000
+    EPSILON_END = 0.05 # Allow more exploitation at the end
+    EPSILON_DECAY = 0.9995 # Slower decay to explore more thoroughly
+    LR = 0.0001 
+    TARGET_UPDATE = 200 # Less frequent target updates for stability
+    MEMORY_SIZE = 50000 # Larger memory to reduce correlation
 
     env = MazeEnv(WIDTH, HEIGHT)
     
@@ -302,6 +302,8 @@ def train(resume=False):
                 
                 optimizer.zero_grad()
                 loss.backward()
+                # Gradient Clipping to prevent exploding gradients
+                torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
                 optimizer.step()
         
         # Update epsilon
