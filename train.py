@@ -117,7 +117,8 @@ class MazeEnv:
         while True:
             ax, ay = random.randint(0, self.width-1), random.randint(0, self.height-1)
             gx, gy = random.randint(0, self.width-1), random.randint(0, self.height-1)
-            if (ax, ay) != (gx, gy):
+            # Ensure minimum distance to avoid trivial episodes and pollution
+            if abs(ax - gx) + abs(ay - gy) > min(self.width, self.height) / 2:
                 self.agent_pos = (ax, ay)
                 self.goal_pos = (gx, gy)
                 break
@@ -183,10 +184,10 @@ class MazeEnv:
             
             # Revisit penalty
             if self.visited_map[ny, nx] > 0:
-                reward = -0.8 # Strong penalty for revisiting to break loops
+                reward = -0.5 # Penalty for revisiting
             else:
                 self.visited_map[ny, nx] = 1.0
-                reward = 0.5 # Higher reward for exploring new cells
+                reward = 0.05 # Small reward, but net step is still negative (-0.1 + 0.05 = -0.05)
             
             if self.agent_pos == self.goal_pos:
                 reward = 20.0 # Stronger goal reward
@@ -223,7 +224,7 @@ def load_checkpoint(filename, model, optimizer):
 def train(resume=False):
     # Hyperparameters
     WIDTH, HEIGHT = 10, 10
-    EPISODES = 10000 
+    EPISODES = 5000 
     BATCH_SIZE = 128 # Increased batch size for smoother gradients
     GAMMA = 0.95 # Slightly increased to look a bit further ahead
     EPSILON_START = 1.0
