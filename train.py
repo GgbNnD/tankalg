@@ -7,6 +7,8 @@ from collections import deque
 import sys
 import os
 import logging
+import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import argparse
 
@@ -60,18 +62,22 @@ class DQN(nn.Module):
     def __init__(self, input_channels, height, width, output_dim):
         super(DQN, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
             nn.ReLU()
         )
         
-        self.flatten_size = 64 * height * width
+        self.flatten_size = 128 * height * width
         
         self.fc = nn.Sequential(
-            nn.Linear(self.flatten_size, 512),
+            nn.Linear(self.flatten_size, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, output_dim)
         )
@@ -125,6 +131,7 @@ class MazeEnv:
         
         self.visited_map = np.zeros((self.height, self.width), dtype=np.float32)
         self.visited_map[self.agent_pos[1], self.agent_pos[0]] = 1.0
+        
         return self.get_state()
 
     def get_state(self):
@@ -187,7 +194,7 @@ class MazeEnv:
                 reward = -0.5 # Penalty for revisiting
             else:
                 self.visited_map[ny, nx] = 1.0
-                reward = 0.05 # Small reward, but net step is still negative (-0.1 + 0.05 = -0.05)
+                reward = 0.2 # Net negative to encourage speed, but better than revisiting
             
             if self.agent_pos == self.goal_pos:
                 reward = 20.0 # Stronger goal reward
@@ -224,12 +231,12 @@ def load_checkpoint(filename, model, optimizer):
 def train(resume=False):
     # Hyperparameters
     WIDTH, HEIGHT = 10, 10
-    EPISODES = 5000 
-    BATCH_SIZE = 128 # Increased batch size for smoother gradients
-    GAMMA = 0.95 # Slightly increased to look a bit further ahead
+    EPISODES = 10000 
+    BATCH_SIZE = 32 # Increased batch size for smoother gradients
+    GAMMA = 0.9 # Slightly increased to look a bit further ahead
     EPSILON_START = 1.0
     EPSILON_END = 0.05 # Allow more exploitation at the end
-    EPSILON_DECAY = 0.9995 # Slower decay to explore more thoroughly
+    EPSILON_DECAY_EPISODES = 4000 # Linear decay duration
     LR = 0.0001 
     TARGET_UPDATE = 200 # Less frequent target updates for stability
     MEMORY_SIZE = 50000 # Larger memory to reduce correlation
@@ -307,8 +314,10 @@ def train(resume=False):
                 torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
                 optimizer.step()
         
-        # Update epsilon
-        epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
+        # Update epsilon (Linear Decay)
+        if epsilon > EPSILON_END:
+            epsilon -= (EPSILON_START - EPSILON_END) / EPSILON_DECAY_EPISODES
+            epsilon = max(EPSILON_END, epsilon)
         
         rewards_history.append(total_reward)
 

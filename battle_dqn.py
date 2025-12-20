@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+# plt.rcParams['toolbar'] = 'None'
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))

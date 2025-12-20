@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+# plt.rcParams['toolbar'] = 'None'
 import matplotlib.patches as patches
 from maze_generator import MazeGenerator
 import random

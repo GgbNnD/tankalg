@@ -1,5 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
+# plt.rcParams['toolbar'] = 'None'
 import numpy as np
 import sys
 import os
