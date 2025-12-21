@@ -1,4 +1,3 @@
-import torch
 import matplotlib.pyplot as plt
 # plt.rcParams['toolbar'] = 'None'
 import numpy as np
@@ -6,6 +5,7 @@ import sys
 import os
 import time
 import random
+import pickle
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -51,24 +51,24 @@ def get_state(agent_pos, goal_pos, width, height, grid_graph, visited_map):
 def test_agent():
     # Parameters (must match training)
     WIDTH, HEIGHT = 10, 10
-    MODEL_PATH = "maze_dqn_model.pth"
+    MODEL_PATH = "maze_dqn_model.pkl"
     
     if not os.path.exists(MODEL_PATH):
         print(f"Error: Model file '{MODEL_PATH}' not found. Please train the model first.")
         return
 
     # Load Model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Note: Input channels=7, Height=10, Width=10, Output=4
-    model = DQN(7, HEIGHT, WIDTH, 4).to(device)
+    model = DQN(7, HEIGHT, WIDTH, 4)
     try:
-        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    except RuntimeError as e:
+        with open(MODEL_PATH, 'rb') as f:
+            params = pickle.load(f)
+        model.set_params(params)
+    except Exception as e:
         print(f"Error loading model: {e}")
         print("It seems the model architecture has changed. Please retrain the model using 'python train.py'.")
         return
 
-    model.eval()
     print("Model loaded successfully.")
 
     # Generate Maze
@@ -114,12 +114,11 @@ def test_agent():
     while agent_pos != goal_pos and steps < max_steps:
         # Get state
         state = get_state(agent_pos, goal_pos, WIDTH, HEIGHT, maze.grid_graph, visited_map)
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+        state_batch = state[np.newaxis, :] # (1, C, H, W)
         
         # Predict action
-        with torch.no_grad():
-            q_values = model(state_tensor)
-            action = q_values.argmax().item()
+        q_values = model.forward(state_batch)
+        action = np.argmax(q_values)
             
         # Execute action
         x, y = agent_pos

@@ -1,10 +1,10 @@
 import sys
 import os
-import torch
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-# plt.rcParams['toolbar'] = 'None'
+plt.rcParams['toolbar'] = 'None'
+import pickle
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -16,22 +16,21 @@ from train import DQN
 class DQN_AI(AI):
     def __init__(self, x, y, color, ax, maze_height, maze_width, model_path):
         super().__init__(x, y, color, ax, maze_height, maze_width)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Initialize model (7 channels, output 4 actions)
-        self.model = DQN(7, maze_height, maze_width, 4).to(self.device)
+        self.model = DQN(7, maze_height, maze_width, 4)
         
         if os.path.exists(model_path):
             try:
-                self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+                with open(model_path, 'rb') as f:
+                    params = pickle.load(f)
+                self.model.set_params(params)
                 print("DQN Model loaded successfully.")
             except Exception as e:
                 print(f"Error loading model: {e}")
         else:
             print(f"Model file not found: {model_path}")
             
-        self.model.eval()
-        
         # Memory for DQN (Visited Map)
         self.visited_map = np.zeros((maze_height, maze_width), dtype=np.float32)
         self.visited_map[y, x] = 1.0
@@ -94,11 +93,10 @@ class DQN_AI(AI):
 
         # 3. DQN Pathfinding (Replaces A*)
         state = self.get_state(grid_graph, (player.x, player.y))
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        state_batch = state[np.newaxis, :] # (1, C, H, W)
         
-        with torch.no_grad():
-            q_values = self.model(state_tensor)
-            action = q_values.argmax().item()
+        q_values = self.model.forward(state_batch)
+        action = np.argmax(q_values)
             
         # Map action to move
         dx, dy = 0, 0
@@ -158,9 +156,9 @@ if __name__ == "__main__":
         print("输入无效，使用默认值 10x10")
         w, h = 10, 10
 
-    model_path = "maze_dqn_model.pth"
+    model_path = "maze_dqn_model.pkl"
     if not os.path.exists(model_path):
-        print("警告：未找到模型文件 maze_dqn_model.pth，AI 可能无法正常移动。")
+        print("警告：未找到模型文件 maze_dqn_model.pkl，AI 可能无法正常移动。")
 
     while True:
         game = BattleGame(w, h, model_path)

@@ -1,6 +1,3 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import random
 from collections import deque
@@ -11,11 +8,13 @@ import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import argparse
+import pickle
 
 # Add current directory to path to ensure imports work
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from maze_generator import MazeGenerator
+import simple_nn as nn
 
 # Setup Logging
 logging.basicConfig(
@@ -27,8 +26,7 @@ logging.basicConfig(
     ]
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logging.info(f"Running on device: {device}")
+logging.info(f"Running on device: CPU (NumPy)")
 
 # --- Headless Maze Generator ---
 class HeadlessMazeGenerator(MazeGenerator):
@@ -58,34 +56,31 @@ class HeadlessMazeGenerator(MazeGenerator):
             self._prim(0, 0)
 
 # --- DQN Model ---
-class DQN(nn.Module):
+class DQN(nn.Sequential):
     def __init__(self, input_channels, height, width, output_dim):
-        super(DQN, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
+            nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU()
         )
         
         self.flatten_size = 128 * height * width
         
         self.fc = nn.Sequential(
+            nn.Flatten(),
             nn.Linear(self.flatten_size, 1024),
             nn.ReLU(),
             nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, output_dim)
         )
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+        
+        super().__init__(self.conv, self.fc)
 
 # --- Replay Buffer ---
 class ReplayBuffer:
@@ -97,7 +92,7 @@ class ReplayBuffer:
 
     def sample(self, batch_size):
         state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
-        return np.array(state), action, reward, np.array(next_state), done
+        return np.array(state), np.array(action), np.array(reward), np.array(next_state), np.array(done)
 
     def __len__(self):
         return len(self.buffer)
@@ -204,23 +199,25 @@ class MazeEnv:
             
         return self.get_state(), reward, done
 
-def save_checkpoint(state, filename="checkpoint.pth"):
-    torch.save(state, filename)
+def save_checkpoint(state, filename="checkpoint.pkl"):
+    with open(filename, 'wb') as f:
+        pickle.dump(state, f)
     logging.info(f"Checkpoint saved to {filename}")
 
 def load_checkpoint(filename, model, optimizer):
     if os.path.isfile(filename):
         logging.info(f"Loading checkpoint '{filename}'")
-        checkpoint = torch.load(filename)
         try:
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            with open(filename, 'rb') as f:
+                checkpoint = pickle.load(f)
+            model.set_params(checkpoint['state_dict'])
+            # optimizer.load_state_dict(checkpoint['optimizer']) # Not implemented for simple Adam yet
             start_episode = checkpoint['episode'] + 1
             epsilon = checkpoint['epsilon']
             logging.info(f"Loaded checkpoint '{filename}' (episode {checkpoint['episode']})")
             return start_episode, epsilon
-        except RuntimeError as e:
-            logging.warning(f"Failed to load checkpoint due to architecture mismatch: {e}")
+        except Exception as e:
+            logging.warning(f"Failed to load checkpoint: {e}")
             logging.warning("Starting from scratch.")
             return 0, 1.0
     else:
@@ -246,20 +243,20 @@ def train(resume=False):
     input_channels = 7 
     output_dim = 4 
     
-    policy_net = DQN(input_channels, HEIGHT, WIDTH, output_dim).to(device)
-    target_net = DQN(input_channels, HEIGHT, WIDTH, output_dim).to(device)
-    target_net.load_state_dict(policy_net.state_dict())
-    target_net.eval()
+    policy_net = DQN(input_channels, HEIGHT, WIDTH, output_dim)
+    target_net = DQN(input_channels, HEIGHT, WIDTH, output_dim)
+    target_net.set_params(policy_net.get_params())
     
-    optimizer = optim.Adam(policy_net.parameters(), lr=LR)
+    optimizer = nn.Adam(policy_net.get_params(), lr=LR)
+    loss_fn = nn.MSELoss()
     replay_buffer = ReplayBuffer(MEMORY_SIZE)
     
     epsilon = EPSILON_START
     start_episode = 0
 
     if resume:
-        start_episode, epsilon = load_checkpoint("checkpoint.pth", policy_net, optimizer)
-        target_net.load_state_dict(policy_net.state_dict())
+        start_episode, epsilon = load_checkpoint("checkpoint.pkl", policy_net, optimizer)
+        target_net.set_params(policy_net.get_params())
     
     logging.info(f"Starting training from episode {start_episode}...")
     
@@ -276,10 +273,10 @@ def train(resume=False):
             if random.random() < epsilon:
                 action = random.randint(0, 3)
             else:
-                with torch.no_grad():
-                    state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-                    q_values = policy_net(state_tensor)
-                    action = q_values.argmax().item()
+                # Forward pass
+                state_batch = state[np.newaxis, :] # (1, C, H, W)
+                q_values = policy_net.forward(state_batch)
+                action = np.argmax(q_values)
             
             next_state, reward, done = env.step(action)
             replay_buffer.push(state, action, reward, next_state, done)
@@ -292,27 +289,32 @@ def train(resume=False):
             if len(replay_buffer) > BATCH_SIZE:
                 states, actions, rewards, next_states, dones = replay_buffer.sample(BATCH_SIZE)
                 
-                states = torch.FloatTensor(states).to(device)
-                actions = torch.LongTensor(actions).to(device)
-                rewards = torch.FloatTensor(rewards).to(device)
-                next_states = torch.FloatTensor(next_states).to(device)
-                dones = torch.FloatTensor(dones).to(device)
+                # Forward pass
+                q_values = policy_net.forward(states)
                 
-                q_values = policy_net(states)
-                q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+                # Get Q-value for taken actions
+                # q_values: (B, 4), actions: (B,)
+                q_value = q_values[np.arange(BATCH_SIZE), actions]
                 
-                with torch.no_grad():
-                    next_q_values = target_net(next_states)
-                    next_q_value = next_q_values.max(1)[0]
-                    expected_q_value = rewards + GAMMA * next_q_value * (1 - dones)
+                # Target Q-values
+                next_q_values = target_net.forward(next_states)
+                next_q_value = np.max(next_q_values, axis=1)
+                expected_q_value = rewards + GAMMA * next_q_value * (1 - dones)
                 
-                loss = nn.MSELoss()(q_value, expected_q_value)
+                # Loss
+                loss = loss_fn.forward(q_value, expected_q_value)
                 
-                optimizer.zero_grad()
-                loss.backward()
-                # Gradient Clipping to prevent exploding gradients
-                torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
-                optimizer.step()
+                # Backward pass
+                grad_loss = loss_fn.backward() # (B,)
+                
+                # We need to backpropagate into the specific action outputs
+                grad_q_values = np.zeros_like(q_values)
+                grad_q_values[np.arange(BATCH_SIZE), actions] = grad_loss
+                
+                policy_net.backward(grad_q_values)
+                
+                # Optimizer step
+                optimizer.step(policy_net.get_grads())
         
         # Update epsilon (Linear Decay)
         if epsilon > EPSILON_END:
@@ -323,21 +325,21 @@ def train(resume=False):
 
         # Update target network
         if episode % TARGET_UPDATE == 0:
-            target_net.load_state_dict(policy_net.state_dict())
+            target_net.set_params(policy_net.get_params())
             
         if episode % 50 == 0:
             logging.info(f"Episode {episode}, Total Reward: {total_reward:.2f}, Epsilon: {epsilon:.2f}, Steps: {steps}")
             # Save checkpoint
             save_checkpoint({
                 'episode': episode,
-                'state_dict': policy_net.state_dict(),
-                'optimizer': optimizer.state_dict(),
+                'state_dict': policy_net.get_params(),
                 'epsilon': epsilon
-            }, filename="checkpoint.pth")
+            }, filename="checkpoint.pkl")
 
     # Save model
-    torch.save(policy_net.state_dict(), "maze_dqn_model.pth")
-    logging.info("Training complete. Model saved to maze_dqn_model.pth")
+    with open("maze_dqn_model.pkl", 'wb') as f:
+        pickle.dump(policy_net.get_params(), f)
+    logging.info("Training complete. Model saved to maze_dqn_model.pkl")
 
     # Plot rewards
     plt.figure(figsize=(10, 5))
