@@ -233,7 +233,7 @@ class MazeGame:
         self.maze = MazeGenerator(width, height)
         # 生成迷宫但不阻塞
         self.maze.generate(algo='prim', block=False)
-        self.maze.title.set_text("Maze Battle! You: Blue (Arrows+Space), AI: Red")
+        self.maze.title.set_text("Maze Battle! You: Blue vs Smart AI: Red")
         
         self.player = Entity(0, 0, 'blue', self.maze.ax, height, width)
         self.ai = AI(width-1, height-1, 'red', self.maze.ax, height, width)

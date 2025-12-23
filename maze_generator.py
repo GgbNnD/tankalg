@@ -6,9 +6,10 @@ import sys
 sys.setrecursionlimit(10000)
 
 class MazeGenerator:
-    def __init__(self, width, height):
+    def __init__(self, width, height, headless=False):
         self.width = width
         self.height = height
+        self.headless = headless
         # 记录访问过的格子
         self.visited = [[False for _ in range(width)] for _ in range(height)]
         
@@ -25,53 +26,54 @@ class MazeGenerator:
                 self.grid_graph[(x, y)] = []
 
         # 用于可视化的设置
-        self.fig, self.ax = plt.subplots(figsize=(8, 8))
-        self.ax.set_aspect('equal')
-        self.ax.axis('off')
-        self.title = self.ax.set_title("Maze Generation (DFS Algorithm)", fontsize=15)
-        
-        # 预先绘制所有墙壁（黑色）
-        self.lines = []
-        for y in range(self.height):
-            for x in range(self.width):
-                # 只画右边和下边的墙，左边和上边由相邻格子负责（除了边界）
-                if x == self.width - 1: # 最右侧边界
-                    self.ax.plot([x+1, x+1], [self.height-y, self.height-(y+1)], 'k-', lw=2)
-                if y == self.height - 1: # 最下侧边界
-                    self.ax.plot([x, x+1], [self.height-(y+1), self.height-(y+1)], 'k-', lw=2)
-                
-                # 内部墙壁（初始全画）
-                # 右墙
-                line_v, = self.ax.plot([x+1, x+1], [self.height-y, self.height-(y+1)], 'k-', lw=2)
-                self.lines.append(((x, y, 'right'), line_v))
-                # 下墙
-                line_h, = self.ax.plot([x, x+1], [self.height-(y+1), self.height-(y+1)], 'k-', lw=2)
-                self.lines.append(((x, y, 'down'), line_h))
-                
-                # 左边界和上边界
-                if x == 0:
-                    self.ax.plot([x, x], [self.height-y, self.height-(y+1)], 'k-', lw=2)
-                if y == 0:
-                    self.ax.plot([x, x+1], [self.height-y, self.height-y], 'k-', lw=2)
+        if not self.headless:
+            self.fig, self.ax = plt.subplots(figsize=(8, 8))
+            self.ax.set_aspect('equal')
+            self.ax.axis('off')
+            self.title = self.ax.set_title("Maze Generation (DFS Algorithm)", fontsize=15)
+            
+            # 预先绘制所有墙壁（黑色）
+            self.lines = []
+            for y in range(self.height):
+                for x in range(self.width):
+                    # 只画右边和下边的墙，左边和上边由相邻格子负责（除了边界）
+                    if x == self.width - 1: # 最右侧边界
+                        self.ax.plot([x+1, x+1], [self.height-y, self.height-(y+1)], 'k-', lw=2)
+                    if y == self.height - 1: # 最下侧边界
+                        self.ax.plot([x, x+1], [self.height-(y+1), self.height-(y+1)], 'k-', lw=2)
+                    
+                    # 内部墙壁（初始全画）
+                    # 右墙
+                    line_v, = self.ax.plot([x+1, x+1], [self.height-y, self.height-(y+1)], 'k-', lw=2)
+                    self.lines.append(((x, y, 'right'), line_v))
+                    # 下墙
+                    line_h, = self.ax.plot([x, x+1], [self.height-(y+1), self.height-(y+1)], 'k-', lw=2)
+                    self.lines.append(((x, y, 'down'), line_h))
+                    
+                    # 左边界和上边界
+                    if x == 0:
+                        self.ax.plot([x, x], [self.height-y, self.height-(y+1)], 'k-', lw=2)
+                    if y == 0:
+                        self.ax.plot([x, x+1], [self.height-y, self.height-y], 'k-', lw=2)
 
-        # 标记起点和终点
-        # 起点 (0, 0) -> 对应绘图坐标 (0.5, height-0.5)
-        self.start_patch = plt.Circle((0.5, self.height - 0.5), 0.3, color='lime', zorder=10)
-        self.ax.add_patch(self.start_patch)
-        self.ax.text(0.5, self.height - 0.5, 'S', ha='center', va='center', color='black', fontweight='bold')
+            # 标记起点和终点
+            # 起点 (0, 0) -> 对应绘图坐标 (0.5, height-0.5)
+            self.start_patch = plt.Circle((0.5, self.height - 0.5), 0.3, color='lime', zorder=10)
+            self.ax.add_patch(self.start_patch)
+            self.ax.text(0.5, self.height - 0.5, 'S', ha='center', va='center', color='black', fontweight='bold')
 
-        # 终点 (width-1, height-1)
-        self.end_patch = plt.Circle((self.width - 0.5, 0.5), 0.3, color='red', zorder=10)
-        self.ax.add_patch(self.end_patch)
-        self.ax.text(self.width - 0.5, 0.5, 'E', ha='center', va='center', color='white', fontweight='bold')
-        
-        # 当前生成头部的标记
-        self.head_patch = plt.Circle((0.5, self.height - 0.5), 0.2, color='blue', zorder=5)
-        self.ax.add_patch(self.head_patch)
+            # 终点 (width-1, height-1)
+            self.end_patch = plt.Circle((self.width - 0.5, 0.5), 0.3, color='red', zorder=10)
+            self.ax.add_patch(self.end_patch)
+            self.ax.text(self.width - 0.5, 0.5, 'E', ha='center', va='center', color='white', fontweight='bold')
+            
+            # 当前生成头部的标记
+            self.head_patch = plt.Circle((0.5, self.height - 0.5), 0.2, color='blue', zorder=5)
+            self.ax.add_patch(self.head_patch)
 
-        plt.tight_layout()
-        plt.ion() # 开启交互模式
-        plt.show()
+            plt.tight_layout()
+            plt.ion() # 开启交互模式
+            plt.show()
 
     def _init_walls(self):
         # 逻辑上初始化所有墙壁
@@ -84,6 +86,8 @@ class MazeGenerator:
         self.remove_wall_visual(x1, y1, direction)
 
     def remove_wall_visual(self, x, y, direction):
+        if self.headless:
+            return
         # 在图中移除墙壁（用白色覆盖或者隐藏线条）
         # 这里我们简单地查找对应的线条对象并将其设为不可见
         target_tag = None
@@ -102,12 +106,15 @@ class MazeGenerator:
                 break
 
     def update_head(self, x, y):
+        if self.headless:
+            return
         self.head_patch.center = (x + 0.5, self.height - y - 0.5)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
     def generate(self, algo='dfs', block=True):
-        self.title.set_text(f"Maze Generation ({algo.upper()} Algorithm)")
+        if not self.headless:
+            self.title.set_text(f"Maze Generation ({algo.upper()} Algorithm)")
         # 从起点 (0,0) 开始
         if algo == 'dfs':
             self._dfs(0, 0)
@@ -115,13 +122,14 @@ class MazeGenerator:
             self._prim(0, 0)
         
         # 生成结束
-        self.head_patch.set_visible(False)
-        self.title.set_text("Maze Generation Complete!")
-        self.fig.canvas.draw()
-        
-        if block:
-            plt.ioff()
-            plt.show()
+        if not self.headless:
+            self.head_patch.set_visible(False)
+            self.title.set_text("Maze Generation Complete!")
+            self.fig.canvas.draw()
+            
+            if block:
+                plt.ioff()
+                plt.show()
 
     def _prim(self, start_x, start_y):
         self.visited[start_y][start_x] = True
