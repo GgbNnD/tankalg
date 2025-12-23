@@ -204,11 +204,47 @@ class Arena:
 
     def draw_map(self, surface):
         surface.blit(self.map_surface, (0, 0))
+
+        # Visualize AI Path
+        for player in self.players:
+            if hasattr(player, 'ai_controller') and hasattr(player.ai_controller, 'path'):
+                path = player.ai_controller.path
+                if path and len(path) > 0:
+                    points = []
+                    # Start from player center
+                    # player.x and player.y are already center coordinates in scaled space?
+                    # Let's check player.py update_position.
+                    # It seems player.x/y are high precision coordinates.
+                    # And they seem to be the center based on rotation logic.
+                    # But we need to divide by C.MOTION_CALC_SCALE to get screen coordinates?
+                    # Wait, in smart_ai.py: my_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
+                    # So player.x is scaled up.
+                    
+                    start_x = player.x / C.MOTION_CALC_SCALE
+                    start_y = player.y / C.MOTION_CALC_SCALE
+                    points.append((start_x, start_y))
+                    
+                    for item in path:
+                        if isinstance(item, int):
+                            col = item % C.COLUMN_NUM
+                            row = item // C.COLUMN_NUM
+                            cx = C.LEFT_SPACE + col * C.BLOCK_SIZE + C.BLOCK_SIZE / 2
+                            cy = C.TOP_SPACE + row * C.BLOCK_SIZE + C.BLOCK_SIZE / 2
+                            points.append((cx, cy))
+                        elif isinstance(item, (tuple, list)) and len(item) == 2:
+                            points.append(item)
+                    
+                    if len(points) > 1:
+                        # Draw path lines (Green)
+                        pygame.draw.lines(surface, (0, 255, 0), False, points, 2)
+                        # Draw target point (Red dot)
+                        pygame.draw.circle(surface, (255, 0, 0), points[-1], 4)
+
         self.draw_info(surface)
         self.supplies.draw(surface)
 
     def get_ai_keys(self, player, original_keys):
-        # 简单的随机 AI 逻辑
+        # 智能 AI 逻辑
         # original_keys 可能是 pygame.key.get_pressed()（序列）
         # 也可能是训练逻辑传入的 dict/defaultdict（mapping）
         if hasattr(original_keys, 'get'):
@@ -225,25 +261,23 @@ class Arena:
         new_keys[pygame.K_l] = 0
         new_keys[pygame.K_u] = 0
         
-        if not hasattr(player, 'ai_action_timer'):
-            player.ai_action_timer = 0
-            player.ai_action = 'idle'
+        # 初始化 AI 控制器
+        if not hasattr(player, 'ai_controller'):
+            from ..ai.smart_ai import SmartAI
+            player.ai_controller = SmartAI(player)
             
-        # 每 200ms 改变一次动作
-        if self.clock - player.ai_action_timer > 200:
-            player.ai_action_timer = self.clock
-            # 动作概率：前进 40%，左转 20%，右转 20%，开火 10%，不动 10%
-            actions = ['forward', 'left', 'right', 'fire', 'idle']
-            weights = [0.4, 0.2, 0.2, 0.1, 0.1]
-            player.ai_action = random.choices(actions, weights=weights)[0]
+        # 获取 AI 决策
+        actions = player.ai_controller.get_keys()
             
-        if player.ai_action == 'forward':
+        if actions['forward']:
             new_keys[pygame.K_i] = 1
-        elif player.ai_action == 'left':
+        if actions['backward']: # 虽然 SmartAI 目前没用到 backward，但预留
+            new_keys[pygame.K_k] = 1
+        if actions['left']:
             new_keys[pygame.K_j] = 1
-        elif player.ai_action == 'right':
+        if actions['right']:
             new_keys[pygame.K_l] = 1
-        elif player.ai_action == 'fire':
+        if actions['fire']:
             new_keys[pygame.K_u] = 1
             
         return new_keys
