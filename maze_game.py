@@ -127,8 +127,9 @@ class AI(Entity):
             # 射击时不移动
             return
 
-        # 3. 寻路逻辑 (A*)
-        path = self.find_path_to_player(grid_graph, player)
+        # 3. 寻路逻辑 (Tactical Dijkstra)
+        # 使用 Dijkstra 算法寻找一条既短又安全的路径，避开玩家的枪线
+        path = self.find_tactical_path(grid_graph, player)
         if path and len(path) > 1:
             next_node = path[1]
             dx = next_node[0] - self.x
@@ -198,35 +199,71 @@ class AI(Entity):
             return False # 不在同一直线
         return True
 
-    def find_path_to_player(self, grid_graph, player):
+    def get_danger_cost(self, x, y, player, grid_graph):
+        cost = 0
+        # 1. 玩家射击线危险 (Pre-fire prevention)
+        px, py = player.x, player.y
+        pdx, pdy = player.facing
+        
+        # 检查是否在玩家的枪口朝向上
+        is_in_line_of_fire = False
+        if pdx != 0 and y == py: # 水平
+            if (pdx > 0 and x > px) or (pdx < 0 and x < px):
+                is_in_line_of_fire = True
+        elif pdy != 0 and x == px: # 垂直
+            if (pdy > 0 and y > py) or (pdy < 0 and y < py):
+                is_in_line_of_fire = True
+                
+        if is_in_line_of_fire:
+            # 检查是否有墙阻挡
+            if self.check_line_of_sight(grid_graph, (px, py), (x, y)):
+                cost += 20 # 极高的代价，尽量避开枪线
+
+        return cost
+
+    def find_tactical_path(self, grid_graph, player):
         start = (self.x, self.y)
         goal = (player.x, player.y)
         
         open_set = []
+        # Dijkstra: (cost, current_node)
         heapq.heappush(open_set, (0, start))
         came_from = {}
-        g_score = {node: float('inf') for node in grid_graph}
-        g_score[start] = 0
+        cost_so_far = {}
+        cost_so_far[start] = 0
         
         while open_set:
-            current = heapq.heappop(open_set)[1]
-            if current == goal:
-                path = []
-                while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                path.append(start)
-                path.reverse()
-                return path
+            current_cost, current = heapq.heappop(open_set)
             
-            for neighbor in grid_graph[current]:
-                tentative_g_score = g_score[current] + 1
-                if tentative_g_score < g_score[neighbor]:
+            if current == goal:
+                break
+            
+            for neighbor in grid_graph.get(current, []):
+                # 基础移动代价 = 1
+                # 危险代价 = get_danger_cost
+                danger = self.get_danger_cost(neighbor[0], neighbor[1], player, grid_graph)
+                new_cost = cost_so_far[current] + 1 + danger
+                
+                if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
+                    cost_so_far[neighbor] = new_cost
+                    priority = new_cost
+                    heapq.heappush(open_set, (priority, neighbor))
                     came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g_score
-                    f_score = tentative_g_score + abs(neighbor[0] - goal[0]) + abs(neighbor[1] - goal[1])
-                    heapq.heappush(open_set, (f_score, neighbor))
-        return None
+
+        # 重建路径
+        if goal not in came_from:
+            return None
+            
+        path = []
+        curr = goal
+        while curr != start:
+            path.append(curr)
+            if curr not in came_from:
+                return None
+            curr = came_from[curr]
+        path.append(start)
+        path.reverse()
+        return path
 
 class MazeGame:
     def __init__(self, width, height):
