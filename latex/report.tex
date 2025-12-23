@@ -1,0 +1,239 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[UTF8]{ctex}
+\usepackage{graphicx}
+\usepackage{listings} % 引入宏包
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{xcolor}   % 引入颜色宏包，用于代码块着色
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\renewcommand{\algorithmicrequire}{\textbf{输入:}}
+\renewcommand{\algorithmicensure}{\textbf{输出:}}
+
+% ISEE -> IEEE
+\title{基于NumPy手写深度强化学习框架的迷宫AI设计}
+
+\author{\IEEEauthorblockN{黄鹤翔    高恒斌  都奕宁} 
+\IEEEauthorblockA{信息与电子工程学院\\
+浙江大学, 杭州, 中国}
+}
+
+\begin{document}
+\maketitle
+% 显示页码（默认居中页脚），适用于需要打印或评审时查看页码
+\pagestyle{plain}
+\begin{abstract}
+本报告详细阐述了一个基于深度强化学习（Deep Q-Network, DQN）的迷宫自动寻路及对战AI系统的设计与实现。项目的核心挑战在于不依赖现有的深度学习框架（如PyTorch或TensorFlow），而是仅使用NumPy库从底层构建卷积神经网络（CNN）及优化器。报告首先介绍了迷宫生成算法（DFS与Prim），随后深入探讨了自定义深度学习框架\texttt{simple\_nn}的实现细节，包括\texttt{im2col}卷积加速、反向传播算法及Adam优化器。在此基础上，搭建了DQN模型，设计了包含墙壁信息、位置信息及访问记录的7通道状态空间，并通过经验回放（Experience Replay）和目标网络（Target Network）机制稳定训练过程。最后，展示了AI在迷宫寻路测试及人机对战模式中的表现，验证了手写框架及算法的有效性。
+\end{abstract}
+
+\begin{IEEEkeywords}
+深度强化学习, DQN, 卷积神经网络, NumPy, 迷宫生成, 自动寻路
+\end{IEEEkeywords}
+
+\lstset{                    % 设置代码显示风格
+    language=Python,        % 代码语言修正为 Python
+    basicstyle=\ttfamily\small,   % 基本字体设置
+    keywordstyle=\color{blue},  % 关键字颜色
+    commentstyle=\color{green!60!black}, % 注释颜色
+    stringstyle=\color{red},    % 字符串颜色
+    showstringspaces=false, % 不显示空格符
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    extendedchars=false,    % 关键设置：解决中文在 listings 中的报错问题
+    mathescape=false,       % 确保特殊符号不被当作数学公式
+}
+
+\section{引言}
+项目的设计灵感源于B站up\@ 河南葫季果和\@ L\_Shy\_P的视频，视频中出现了一个近乎无敌的ai，能够追踪敌人躲避子弹。
+
+本项目旨在旨在构建一个具备自主学习能力的坦克对战AI系统。与常规项目不同，本项目的核心要求是“去框架化”，即不调用成熟的深度学习库，而是利用Python和NumPy从零实现神经网络的底层算子（卷积、全连接、激活函数）及训练机制。这不仅考验对强化学习算法的理解，更要求对神经网络反向传播及矩阵运算有深入的掌握。
+
+\section{设计任务和要求}
+本项目的具体设计任务和要求如下：
+\begin{enumerate}
+    \item \textbf{迷宫环境构建}：实现基于深度优先搜索（DFS）和Prim算法的随机迷宫生成器，支持可视化展示。
+    \item \textbf{底层框架实现}：仅使用NumPy库，实现卷积层（Conv2d）、全连接层（Linear）、激活函数（ReLU）、损失函数（MSELoss）及优化器（Adam）。
+    \item \textbf{AI算法实现}：基于手写框架，在简单的环境中搭建DQN框架训练ai，在复杂的环境中使用遗传算法迭代ai。
+    \item \textbf{人机对战模式}：集成训练好的模型，实现玩家与AI在迷宫中的实时对战（坦克大战模式）。
+\end{enumerate}
+
+\section{算法原理}
+
+\subsection{迷宫生成算法-DFS}
+DFS 迷宫生成算法本质上是一种递归回溯过程。它从起始格子出发，随机选择一个未访问的相邻格子进行“打通”（移除中间墙壁），然后递归地对该新格子执行相同操作。当当前格子的所有邻居均已被访问时，算法回退至上一层，直至遍历完整个网格。
+\begin{itemize}
+\item 将每个网格单元视为图中的一个节点；
+\item 初始时所有节点标记为“未访问”，所有相邻节点间存在“墙”；
+\item 从任意起点（如左上角 (0,0)）开始 DFS 遍历；
+\item 每次移动到新节点时，移除当前节点与目标节点之间的墙，并将目标节点加入连通图；
+\item 递归完成后，整个网格形成一棵生成树，对应一个无环连通迷宫。
+\end{itemize}
+
+\subsection{迷宫生成算法-prim}
+Prim 算法原本用于求解最小生成树（Minimum Spanning Tree, MST）。在迷宫生成中，我们将其改造为随机 Prim 算法：不考虑边权，而是随机选择待扩展的边。\par
+
+算法维护一个“边界集合”（frontier set），包含所有与已生成区域相邻但尚未加入的格子。每一步从边界集中随机选取一个格子，将其与已生成区域中的某个邻居连接（打通墙壁），并将该格子的新邻居加入边界集。重复此过程直至覆盖全部格子。\par
+
+Prim 生成的迷宫通常具有更多短分支和较短的主路径，整体结构更“开阔”，有利于测试智能体在多岔路口的决策能力。
+\begin{itemize}
+\item 将网格视为完全图，每条潜在通道（相邻格子间）是一条边；
+\item 任选一个起始格子加入生成树；
+\item 将其所有相邻格子加入“边界集”；
+\item 循环：从边界集中随机选一格子，随机选择其一个已在生成树中的邻居，打通两者之间的墙，并将该格子纳入生成树，同时将其未访问邻居加入边界集；
+\item 直至所有格子被纳入。
+\end{itemize}
+
+DFS生成的迷宫通常具有长而曲折的走廊和较少的分支,Prim 生成的迷宫通常具有更多短分支和较短的主路径
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale = 0.2]{figure/dfs.png}
+    \caption{DFS生成迷宫}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale = 0.2]{figure/prim.png}
+    \caption{prim生成迷宫}
+\end{figure}
+
+\subsection{解迷宫算法-A*}
+A*（A-Star）算法是一种广泛应用于路径规划和图遍历的启发式搜索算法。它结合了 Dijkstra 算法的完备性与贪心最佳优先搜索的效率，能够高效地找到从起点到终点的最短路径。\par
+
+A* 算法通过评估函数 f(n) 来决定下一个要探索的节点：
+$$
+f(n)=g(n)+h(n)
+$$
+其中：
+\begin{itemize}
+\item g(n)：从起点到当前节点 n 的实际代价。
+\item h(n)：从当前节点 n 到目标点的启发式估计代价。
+\end{itemize}
+在本项目中使用曼哈顿距离$abs(x_1 - x_2) + abs(y_1 - y_2)$进行启发式搜索。
+我们在初始化时将起点(0,0)加入open列表中，然后进入循环，直到open列表为空或找到终点为止。在每一步迭代中，我们从open列表中选择f值最小的节点作为当前节点。然后检查当前节点是否为目标节点，如果是则结束循环；如果不是目标节点，则将其标记为已处理并将其相邻的未处理节点加入open列表中。同时，将已处理的节点加入closed列表中以避免重复处理。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale = 0.2]{figure/astar.png}
+    \caption{A*算法解迷宫}
+\end{figure}
+
+\subsection{自定义深度学习框架 (simple\_nn)}
+为了替代PyTorch，我们实现了\texttt{simple\_nn.py}。
+\subsubsection{卷积层实现}
+卷积操作的核心在于高效地提取局部特征。为了避免低效的多重循环，采用了\texttt{im2col}（image to column）技术，将输入特征图展开为矩阵，从而将卷积运算转化为矩阵乘法（GEMM）。
+\begin{equation}
+    Y = W_{col} \times X_{col} + b
+\end{equation}
+其中 $X_{col}$ 是展开后的输入矩阵，$W_{col}$ 是重排后的权重矩阵。
+
+\subsubsection{优化器}
+实现了Adam优化器，结合了动量法（Momentum）和RMSProp的优点，自适应调整学习率。
+\begin{align}
+    m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \\
+    v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \\
+    \theta_{t+1} &= \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \epsilon} \hat{m}_t
+\end{align}
+
+\subsection{AI训练-DQN}
+DQN (Deep Q-Network) 将卷积神经网络与Q-Learning结合，解决了高维状态空间的强化学习问题。
+\subsubsection{核心机制}
+\begin{itemize}
+    \item 经验回放 (Experience Replay)：构建一个回放池 $D$，存储转移样本 $(s, a, r, s', done)$。训练时随机采样一个小批量（Batch），打破了数据间的相关性，提高了训练的稳定性。
+    \item 目标网络 (Target Network)：引入一个参数滞后的目标网络 $\hat{Q}$ 计算目标值，避免了“自举”（Bootstrapping）导致的目标值震荡。目标网络每一定时间从策略网络中复制参数。
+\end{itemize}
+通过贝尔曼最优方程来计算期望Q值，即执行该动作后获得的即时奖励 r 加上对未来最大 Q 值的折扣期望
+$$
+Q^*(s, a) = \mathbf{E}*{s' \sim \mathcal{P}} \left[ r + \gamma \max*{a'} Q^*(s', a') \right]
+$$
+目标函数为最小化均方误差：
+\begin{equation}
+    L(\theta) = \mathbf{E}\left[ \left( r + \gamma \max_{a'} \hat{Q}(s', a'; \theta^-) - Q(s, a; \theta) \right)^2 \right]
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale = 0.2]{figure/dqn.png}
+    \caption{dqn算法流程结构}
+\end{figure}
+
+\subsubsection{Q值估计网络设计-输入层}
+输入层设计为 $7 \times H \times W$ 的张量，包含7个通道：
+\begin{itemize}
+    \item 通道 0-3 (墙壁信息)：分别编码每个格子上、下、左、右四个方向的墙壁存在情况
+    \item 通道 4-5 (位置信息)：分别使用One-hot编码智能体位置和目标位置
+    \item 通道 6 (历史轨迹)：记录智能体访问过的路径，赋予智能体记忆
+\end{itemize}
+
+\subsubsection{Q值估计网络设计-卷积层}
+网络包含4层卷积层，通道数分别为 32, 64, 128, 128，主要为卷积层与relu激活层的循环。
+网络中没有加入传统CNN网络中常见的池化层，主要是因为池化层的加入会模糊智能体与目标点的位置信息，
+影响训练效果。\par
+通过堆叠4层卷积层，深层神经元的感受野逐渐扩大，能够感知更大范围的迷宫结构，从而规划长距离路径。
+通道数逐层增加（32 $\to$ 128），使得网络能够组合低级几何特征.
+\begin{table}[htbp]
+\centering
+\caption{卷积神经网络各层参数配置}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{} & \textbf{输入通道数} & \textbf{输出通道数} & \textbf{卷积核大小} & \textbf{步长} & \textbf{填充} \\ \hline
+第一层    & 7                   & 32                  & 3                    & 1           & 1           \\ \hline
+第二层    & 32                  & 64                  & 3                    & 1           & 1           \\ \hline
+第三层    & 64                  & 128                 & 3                    & 1           & 1           \\ \hline
+第四层    & 128                 & 128                 & 3                    & 1           & 1           \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Q值估计网络设计-全连接层}
+卷积层输出展平后，连接3层全连接层（1024 $\to$ 512 $\to$ 4）,提供了强大的非线性拟合能力，将提取的迷宫特征转化为上、下、左、右四个离散动作的Q值。
+
+\subsection{超参数设计}
+\begin{lstlisting}
+# Hyperparameters
+WIDTH, HEIGHT = 10, 10
+EPISODES = 10000 
+BATCH_SIZE = 32
+GAMMA = 0.9 # 对未来奖励的关心程度，越大越关心
+# 使用线性下降的EPSILON，EPSILON越大越倾向于随机探索
+EPSILON_START = 1.0
+EPSILON_END = 0.05
+EPSILON_DECAY_EPISODES = 4000
+LR = 0.0001 
+TARGET_UPDATE = 200 #目标网络的更新频率
+MEMORY_SIZE = 50000 #经验池的大小
+\end{lstlisting}
+
+\subsection{AI训练-遗传算法}
+遗传算法是一种受达尔文生物进化论启发的元启发式优化算法。它模拟了自然界“物竞天择，适者生存”的过程，通过在解空间中维护一个种群（Population），并利用选择（Selection）、交叉（Crossover）和变异（Mutation）等遗传算子，迭代地演化出越来越优的解决方案。\par
+
+在这个项目中，我们使用一个全连接神经网络来对智能体的下一步动作进行决策，通过遗传算法迭代更新神经网络的参数。
+同时在训练过程中，我们借鉴了DQN的训练思路，每隔一段时间将训练目标的参数从智能体中复制下来，以求获得更加强大的智能体。
+
+\begin{itemize}
+    \item 选择算子：锦标赛选择
+    \item 交叉算子：均匀交叉
+    \item 变异算子：高斯扰动
+    \item 进化策略：精英保留，将每一代中适应度最高的前10\%个体（精英）直接复制到下一代，不经过交叉和变异
+\end{itemize}
+
+\section{主要仪器设备}
+\begin{itemize}
+    \item \textbf{开发语言}：Python 3.10
+    \item \textbf{核心库}：NumPy (用于矩阵运算), Matplotlib (用于可视化)
+    \item \textbf{硬件环境}：AMD CPU
+    \item \textbf{操作系统}：Linux
+\end{itemize}
+
+\section{设计结果记录与分析}
+
+\section{结论}
+
+
+\section{参考文献}
+\begin{enumerate}
+    \item https://www.bilibili.com/video/BV17EswzLEKw/
+\end{enumerate}
+
+\end{document}

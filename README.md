@@ -3,6 +3,7 @@
 - python3.10
 - matplotlib
 - torch
+- numpy
 
 ## 生成迷宫
 
