@@ -275,6 +275,32 @@ TARGET_UPDATE = 200 #目标网络的更新频率
 MEMORY_SIZE = 50000 #经验池的大小
 \end{lstlisting}
 
+\subsection{奖励设计}
+\begin{lstlisting}
+# 每一步惩罚使得ai寻找最短路径
+reward = -0.1 
+done = False
+
+if (nx, ny) in neighbors:
+    self.agent_pos = (nx, ny)
+    
+    if self.visited_map[ny, nx] > 0:
+        # 格子重复访问惩罚
+        reward = -0.5 
+    else:
+        self.visited_map[ny, nx] = 1.0
+        # 访问新格子的奖励
+        reward = 0.2
+    
+    if self.agent_pos == self.goal_pos:
+        # 到达目标点的奖励
+        reward = 20.0
+        done = True
+else:
+    # 撞墙惩罚
+    reward = -1.0
+\end{lstlisting}
+
 \subsection{AI训练-遗传算法}
 遗传算法是一种受达尔文生物进化论启发的元启发式优化算法。它模拟了自然界“物竞天择，适者生存”的过程，通过在解空间中维护一个种群（Population），并利用选择（Selection）、交叉（Crossover）和变异（Mutation）等遗传算子，迭代地演化出越来越优的解决方案。\par
 
