@@ -1,74 +1,77 @@
-# TANKTROUBLE_python-edition
+# TANKTROUBLE - Python Edition
 
-语言:python 3.10.6
+这是一个基于 Python 和 Pygame 的 Tank Trouble 复刻版。
+本项目包含单人练习（对抗 AI）和本地多人对战功能。
 
-需要pygame和numpy
+## 特性
 
-### 演示图
-![img1](https://github.com/mglyn/TANKTROUBLE-pythonedition/blob/main/pics/pic1.png)
-![img2](https://github.com/mglyn/TANKTROUBLE-pythonedition/blob/main/pics/pic2.png)
+- **智能 AI 对手**：玩家 2 默认由智能 AI 控制，能够自动寻路、躲避子弹和攻击。
+- **本地多人对战**：支持最多 3 个实体（包括 AI）在同一键盘上对战。
+- **物理引擎**：基于 Pygame 的 AABB 碰撞检测和反弹逻辑。
+- **固定地图**：目前使用包含两面竖直墙壁的固定竞技场地图。
 
-### 演示视频
-https://www.bilibili.com/video/BV13d4y1Y7Tx/?vd_source=6d48c8dce1e2a6f3b5318760f3511c93
+## 环境要求
 
-使用递归分割算法生成迷宫
-基于pygame的AABB碰撞盒实现的精细碰撞逻辑
+- Python 3.10+
+- Pygame
+- Numpy
 
-## 虚拟环境运行
-```powershell
-# 未安装虚拟环境时必要步骤
-python -m venv .venv
-# 未安装虚拟环境时必要步骤
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+## 安装与运行
 
-.\.venv\Scripts\Activate.ps1
+建议使用虚拟环境运行本项目。
 
-# 未安装虚拟环境时必要步骤
-python -m pip install --upgrade pip setuptools wheel
-# 未安装虚拟环境时必要步骤
-pip install -r requirements.txt
+### Windows (PowerShell)
 
-python main.py
+1. **创建并激活虚拟环境**
+   ```powershell
+   python -m venv .venv
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+   .\.venv\Scripts\Activate.ps1
+   ```
 
-# 调试模式运行，会暴露相应数据
-python debug_run.py
-```
+2. **安装依赖**
+   ```powershell
+   python -m pip install --upgrade pip setuptools wheel
+   pip install -r requirements.txt
+   ```
 
-# 强化学习训练
-```powershell
-# 图形化
-python source/rl/train.py
+3. **运行游戏**
+   ```powershell
+   python main.py
+   ```
 
-# 默认优先加载 Interrupted ，如无则加载 latest
-python source/rl/train.py --load auto
-# 或者直接 (默认就是 auto)
-python source/rl/train.py
+## 游戏操作
 
-# 指定加载 latest
-python source/rl/train.py --load latest
+### 主菜单
 
-# 指定加载 interrupted
+- **Q**: 启用/禁用 **玩家 1** (红色)
+- **U**: 启用/禁用 **玩家 2** (绿色 - **AI 控制**)
+- **DELETE**: 启用/禁用 **玩家 3** (蓝色)
+- **SPACE**: 开始游戏 (至少需要启用 2 个玩家)
 
-python source/rl/train.py --load interrupted
+### 游戏内控制
 
-# 从头开始
-python source/rl/train.py --load none
+| 玩家 | 移动 | 射击 | 说明 |
+| --- | --- | --- | --- |
+| **Player 1** (红) | `W` `A` `S` `D` | `Q` | 人类玩家 |
+| **Player 2** (绿) | `I` `J` `K` `L` | `U` | **由电脑 (AI) 控制** (手动按键无效) |
+| **Player 3** (蓝) | `↑` `↓` `←` `→` | `DELETE` | 人类玩家 |
 
-# 命令行
-python source/rl/train.py --mode cli
+- **ESC**: 退出到主菜单
+- **P**: 暂停游戏
 
-# 默认优先加载 Interrupted ，如无则加载 latest
-python source/rl/train.py --load auto --mode cli
-# 或者直接 (默认就是 auto)
-python source/rl/train.py --mode cli
+## 游戏模式说明
 
-# 指定加载 latest
-python source/rl/train.py --load latest --mode cli
+- **人机对战**: 在菜单中启用 **Player 1** 和 **Player 2**。
+- **双人对战**: 在菜单中启用 **Player 1** 和 **Player 3**。
+- **混战模式**: 启用所有三个玩家。
 
-# 指定加载 interrupted
-python source/rl/train.py --load interrupted --mode cli
+## 项目结构
 
-# 从头开始
-python source/rl/train.py --load none --mode cli
-```
+- `main.py`: 游戏主入口。
+- `debug_run.py`: 带调试输出的入口。
+- `source/`: 源代码目录。
+  - `ai/`: AI 逻辑实现 (`smart_ai.py`)。
+  - `sites/`: 游戏场景 (菜单、竞技场等)。
+  - `parts/`: 游戏实体 (玩家、子弹、墙壁等)。
     

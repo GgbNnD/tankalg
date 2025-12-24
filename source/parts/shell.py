@@ -6,8 +6,12 @@ from . import cell, shell
 
 
 class Shell(pygame.sprite.Sprite):
+    _id_counter = 0
+
     def __init__(self, x, y, theta, s, v, t, arena, player):
         pygame.sprite.Sprite.__init__(self)
+        self.id = Shell._id_counter
+        Shell._id_counter += 1
         self.x = x
         self.y = y
         self.theta = theta

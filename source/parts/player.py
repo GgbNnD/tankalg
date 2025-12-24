@@ -33,6 +33,11 @@ class player(pygame.sprite.Sprite):
         self.exploding = False
         self.rounds = pygame.sprite.Group()
         self.particles = pygame.sprite.Group()
+        
+        # AI Control
+        self.ai_controlled = (self.name == 2)
+        self.throttle = 0.0 # -1.0 to 1.0
+        self.steering = 0.0 # -1.0 to 1.0
 
     def setup_hitboxes(self):
         self.hitboxes = pygame.sprite.Group()
@@ -112,27 +117,45 @@ class player(pygame.sprite.Sprite):
                     self.theta += C.BASE_TURN_W*self.not_stuck
 
         elif self.name == 2:
-            if not keys[pygame.K_i] or not keys[pygame.K_k]:
-                if keys[pygame.K_i]:
+            if self.ai_controlled:
+                # Continuous AI Control
+                if abs(self.throttle) > 0.01:
                     self.moving = True
-                    self.x += C.BASE_MOVE_V * \
-                        numpy.cos(self.theta)*self.not_stuck
-                    self.y += C.BASE_MOVE_V * \
-                        numpy.sin(self.theta)*self.not_stuck
-                if keys[pygame.K_k]:
+                    speed = 0
+                    if self.throttle > 0:
+                        speed = self.throttle * C.BASE_MOVE_V
+                    else:
+                        speed = self.throttle * C.BACKWARD_V # throttle is negative
+                    
+                    self.x += speed * numpy.cos(self.theta) * self.not_stuck
+                    self.y += speed * numpy.sin(self.theta) * self.not_stuck
+                
+                if abs(self.steering) > 0.01:
                     self.moving = True
-                    self.x += -C.BACKWARD_V * \
-                        numpy.cos(self.theta)*self.not_stuck
-                    self.y += -C.BACKWARD_V * \
-                        numpy.sin(self.theta)*self.not_stuck
+                    self.theta += self.steering * C.BASE_TURN_W * self.not_stuck
+            else:
+                # Manual Control Fallback (if AI disabled or for testing)
+                if not keys[pygame.K_i] or not keys[pygame.K_k]:
+                    if keys[pygame.K_i]:
+                        self.moving = True
+                        self.x += C.BASE_MOVE_V * \
+                            numpy.cos(self.theta)*self.not_stuck
+                        self.y += C.BASE_MOVE_V * \
+                            numpy.sin(self.theta)*self.not_stuck
+                    if keys[pygame.K_k]:
+                        self.moving = True
+                        self.x += -C.BACKWARD_V * \
+                            numpy.cos(self.theta)*self.not_stuck
+                        self.y += -C.BACKWARD_V * \
+                            numpy.sin(self.theta)*self.not_stuck
 
-            if not keys[pygame.K_j] or not keys[pygame.K_l]:
-                if keys[pygame.K_j]:
-                    self.moving = True
-                    self.theta += -C.BASE_TURN_W*self.not_stuck
-                if keys[pygame.K_l]:
-                    self.moving = True
-                    self.theta += C.BASE_TURN_W*self.not_stuck
+                if not keys[pygame.K_j] or not keys[pygame.K_l]:
+                    if keys[pygame.K_j]:
+                        self.moving = True
+                        self.theta += -C.BASE_TURN_W*self.not_stuck
+                    if keys[pygame.K_l]:
+                        self.moving = True
+                        self.theta += C.BASE_TURN_W*self.not_stuck
 
         elif self.name == 3:
             if not keys[pygame.K_UP] or not keys[pygame.K_DOWN]:
@@ -184,7 +207,7 @@ class player(pygame.sprite.Sprite):
             flag = True
 
         if flag and self.can_fire and not self.fire:
-            if self.round_num < C.MAX_ROUND_NUM or self.shotgun or self.biground:
+            if True:
                 self.fire = True
                 self.fire_timer = self.arena.clock
 
@@ -206,6 +229,12 @@ class player(pygame.sprite.Sprite):
                     self.biground = False
 
                 else:
+                    if self.round_num >= 5:
+                        normal_shells = [s for s in self.rounds if type(s) is shell.Shell]
+                        if normal_shells:
+                            oldest = min(normal_shells, key=lambda s: s.id)
+                            oldest.go_die()
+
                     self.rounds.add(shell.Shell(x=self.x+0.32*C.MPX*numpy.cos(self.theta),
                                     y=self.y+0.32*C.MPY*numpy.sin(self.theta),
                                     theta=self.theta, s=1, v=1, t=1,

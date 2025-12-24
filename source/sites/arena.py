@@ -267,17 +267,13 @@ class Arena:
             player.ai_controller = SmartAI(player)
             
         # 获取 AI 决策
+        # SmartAI 现在直接更新 player.throttle 和 player.steering
+        # 返回的 actions 仅包含 fire 等离散动作
         actions = player.ai_controller.get_keys()
             
-        if actions['forward']:
-            new_keys[pygame.K_i] = 1
-        if actions['backward']: # 虽然 SmartAI 目前没用到 backward，但预留
-            new_keys[pygame.K_k] = 1
-        if actions['left']:
-            new_keys[pygame.K_j] = 1
-        if actions['right']:
-            new_keys[pygame.K_l] = 1
-        if actions['fire']:
+        # 移动控制已由 player.ai_controller 内部处理 (设置 throttle/steering)
+        # 这里只需要处理开火
+        if actions.get('fire', False):
             new_keys[pygame.K_u] = 1
             
         return new_keys
