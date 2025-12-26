@@ -14,14 +14,14 @@ class DodgeStrategy:
 
     def get_dodge_action(self, all_trajectories=None):
         """
-        Determines if the AI needs to dodge and returns the action.
-        Returns a dictionary with 'steering' and 'throttle' if dodging, else None.
+        判断 AI 是否需要闪避并返回相应动作。
+        若需要闪避，返回包含 'steering' 和 'throttle' 的字典，否则返回 None。
         """
-        # 1. Threat Detection & Prediction
+        # 1. 威胁检测与预测
         if all_trajectories is None:
             all_trajectories = self.get_all_bullet_trajectories()
             
-        # Filter threats that are hitting us NOW
+        # 过滤出当前将要命中我们的威胁
         threats = []
         my_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
         
@@ -29,17 +29,17 @@ class DodgeStrategy:
              if self.check_trajectory_collision(trajectory, my_pos):
                 threats.append((dist, s, trajectory))
         
-        # Debug Print (1s interval)
+        # 调试打印（1 秒间隔）
         current_time = pygame.time.get_ticks()
         if current_time - self.debug_timer > 1000:
             self.debug_timer = current_time
             if threats:
                 print(f"[DODGE DEBUG] Threats: {len(threats)} | Closest Dist: {threats[0][0]:.2f}")
-                # Check if generate_dodge_strategy finds a solution
+                # 检查 generate_dodge_strategy 是否能找到解
                 action = self.generate_dodge_strategy(threats, all_trajectories)
                 print(f"[DODGE DEBUG] Action: {action}")
             elif all_trajectories:
-                # Print info about nearest bullet even if not threatening, to check detection
+                # 即使没有威胁，打印最近子弹信息以检查检测范围
                 print(f"[DODGE DEBUG] No Threats. Nearest Bullet: {all_trajectories[0][0]:.2f}")
             else:
                 print("[DODGE DEBUG] No Bullets Detected")
@@ -48,19 +48,19 @@ class DodgeStrategy:
             self.active_strategy = None
             return None
             
-        # 2. Strategy Generation
-        # Pass all trajectories to ensure we don't dodge into another bullet
+        # 2. 策略生成
+        # 传入所有轨迹以确保不会躲到另一颗子弹的路径上
         action = self.generate_dodge_strategy(threats, all_trajectories)
         return action
 
     def get_all_bullet_trajectories(self):
         """
-        Returns a list of (distance, shell, trajectory) for all nearby shells.
+        返回所有附近炮弹的列表，格式为 (距离, shell 对象, 预测轨迹)。
         """
         trajectories = []
         shells = self.arena.get_shells(normalize=False)
         
-        # We need actual shell objects
+        # 收集实际的炮弹对象
         all_shells = []
         for p in self.arena.players:
             for s in p.rounds:
@@ -69,27 +69,27 @@ class DodgeStrategy:
         my_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
         
         for s in all_shells:
-            # Ignore own bullets that are just fired (protection period)
+            # 忽略刚发射并处于保护期的自有子弹
             if s.player == self.player and s.protection:
                 continue
                 
-            # Check distance
+            # 距离检查
             s_pos = (s.x / C.MOTION_CALC_SCALE, s.y / C.MOTION_CALC_SCALE)
             dist = math.hypot(s_pos[0] - my_pos[0], s_pos[1] - my_pos[1])
             
             if dist > self.threat_range:
                 continue
                 
-            # Predict trajectory
+            # 预测轨迹
             trajectory = self.predict_trajectory(s)
             trajectories.append((dist, s, trajectory))
             
-        # Sort by distance
+        # 按距离排序
         trajectories.sort(key=lambda x: x[0])
         return trajectories
 
     def get_threats(self):
-        # Legacy method wrapper if needed, but we use get_all_bullet_trajectories now
+        # 兼容旧接口的封装方法，当前推荐使用 get_all_bullet_trajectories
         trajectories = self.get_all_bullet_trajectories()
         threats = []
         my_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
@@ -100,8 +100,8 @@ class DodgeStrategy:
 
     def predict_trajectory(self, shell):
         """
-        Predicts the shell's path for max_predict_steps.
-        Returns a list of line segments [(start_pos, end_pos), ...].
+        预测炮弹在最多 max_predict_steps 步内的路径。
+        返回线段列表 [(起点, 终点), ...]。
         """
         segments = []
         
@@ -111,9 +111,8 @@ class DodgeStrategy:
         curr_vx = shell.vx
         curr_vy = shell.vy
         
-        # Simulation loop
-        # We simulate in larger steps or exact physics steps?
-        # Let's simulate step-by-step but maybe optimize
+        # 模拟循环
+        # 我们逐步模拟物理，但也可根据需要做加速优化
         
         sim_steps = self.max_predict_steps
         
@@ -123,23 +122,21 @@ class DodgeStrategy:
             next_x = curr_x + curr_vx
             next_y = curr_y + curr_vy
             
-            # Collision check with walls (Simplified version of shell.update_collisions)
-            # We need to detect bounce
+            # 与墙体的碰撞检测（简化版的 shell.update_collisions）
+            # 需要检测反弹
             
-            # Convert to screen coords for wall check
+            # 转换为屏幕坐标以便墙体检测
             cx, cy = next_x / C.MOTION_CALC_SCALE, next_y / C.MOTION_CALC_SCALE
             
-            # Check walls
-            # This is expensive to do exactly like the game loop for every step
-            # We can use raycasting for optimization, but let's stick to step simulation for accuracy
+            # 检查墙体碰撞
+            # 逐步精确检测较为昂贵，可用射线加速，但此处采用步进以获得更高准确性
             
             bounced = False
             
-            # Get nearby walls
+            # 获取附近的墙格索引
             cells_idx = cell.calculate_cell_num(cx, cy)
             
-            # Create a dummy rect for collision
-            # Shell size is small
+            # 创建用于碰撞检测的临时矩形，炮弹尺寸较小
             s_rect = pygame.Rect(0, 0, C.ROUND_PX, C.ROUND_PY)
             s_rect.center = (cx, cy)
             
@@ -148,7 +145,7 @@ class DodgeStrategy:
                 c = self.arena.cells[cells_idx[i]]
                 for w in c.walls:
                     if s_rect.colliderect(w.rect):
-                        # Bounce logic
+                        # 反弹逻辑
                         if abs(w.rect.top - s_rect.bottom) <= C.ROUND_COLLITION_EPS + 2 and curr_vy > 0:
                             curr_vy *= -1
                             bounced = True
@@ -173,18 +170,18 @@ class DodgeStrategy:
                 segments.append((seg_start, seg_end))
                 seg_start = seg_end
                 
-        # Add final segment
+        # 添加最终线段
         seg_end = (curr_x / C.MOTION_CALC_SCALE, curr_y / C.MOTION_CALC_SCALE)
         segments.append((seg_start, seg_end))
         
         return segments
 
     def check_trajectory_collision(self, trajectory, pos):
-        # Check if any segment intersects with player's hitbox (approximated as circle/rect)
-        # Player radius approx + Bullet radius approx
-        # C.PLAYER_PX is 41, C.ROUND_PX is 9.
-        # Radius sum = (41 + 9) / 2 = 25.
-        # Adding a small safety margin (+5) = 30.
+        # 检查任一线段是否与玩家的命中区域相交（近似为圆/矩形）
+        # 玩家半径约 + 子弹半径约
+        # C.PLAYER_PX 为 41，C.ROUND_PX 为 9。
+        # 半径和 = (41 + 9) / 2 = 25。
+        # 加上小安全边距 (+5) = 30。
         radius = 30 
         
         for start, end in trajectory:
@@ -206,18 +203,17 @@ class DodgeStrategy:
         return dist_sq <= radius**2
 
     def generate_dodge_strategy(self, threats, all_trajectories=None):
-        # Priority 1: Rotation
-        # Try rotating in place to minimize profile? 
-        # In Tank Trouble, player is somewhat circular but hitboxes are complex.
-        # Rotating might move hitboxes out of way.
+        # 优先策略 1：旋转
+        # 尝试原地旋转以减小目标截面？
+        # 在 Tank Trouble 中玩家近似圆形，但命中盒较复杂，旋转可能将部分命中区移开。
         
-        # Priority 2: Rotate and Move (Side Dodge)
-        # Determine dodge direction based on bullet velocity
+        # 优先策略 2：旋转并移动（侧移躲闪）
+        # 根据子弹速度方向决定躲避方向
         
-        # We simulate different actions and check if they result in safety
+        # 我们对不同动作进行模拟并检查是否安全
         
-        # Simplified approach:
-        # Try 4 directions: Forward, Backward, Rotate CW, Rotate CCW
+        # 简化方法：
+        # 尝试若干基础动作：前进、后退、顺时针旋转、逆时针旋转等
         
         best_action = None
         
@@ -234,27 +230,27 @@ class DodgeStrategy:
             (-1, -1) # Backward Left
         ]
         
-        # If all_trajectories is not provided, use threats (which is a subset)
-        # But ideally we should use all_trajectories to avoid dodging into other bullets
+        # 若未提供 all_trajectories，则使用 threats（其为子集）
+        # 理想情况应使用所有轨迹以避免躲入其他子弹路径
         check_against = all_trajectories if all_trajectories is not None else threats
         
-        # First pass: Find a completely safe action
+        # 第一轮：寻找完全安全的动作
         for steering, throttle in candidates:
             if self.simulate_action_safety(steering, throttle, check_against):
                 return {'steering': steering, 'throttle': throttle}
                 
-        # Second pass: If no safe action, find the "least dangerous" action
-        # We want to maximize the distance to the closest threat
+        # 第二轮：如果没有安全动作，找出"最不危险"的动作
+        # 我们希望最大化与最近威胁的最小距离
         best_candidate = (0, 0)
         max_min_dist = -1.0
         
         for steering, throttle in candidates:
             # Simulate final position after N frames
             final_pos = self.simulate_movement(steering, throttle, steps=30)
-            if final_pos is None: # Hit wall
+            if final_pos is None: # 碰撞墙体
                 continue
                 
-            # Calculate min distance to any threat trajectory
+            # 计算到任一威胁轨迹的最小距离
             min_dist = float('inf')
             for _, _, trajectory in check_against:
                 d = self.get_distance_to_trajectory(trajectory, final_pos)
@@ -265,19 +261,19 @@ class DodgeStrategy:
                 max_min_dist = min_dist
                 best_candidate = (steering, throttle)
                 
-        # If we found a better action than stopping (or stopping is best)
+        # 返回找到的最佳候选动作（比停止更好则返回该动作，否则返回停止）
         return {'steering': best_candidate[0], 'throttle': best_candidate[1]}
 
     def is_action_safe(self, steering, throttle, all_trajectories):
         """
-        Public method to check if an action is safe against all trajectories.
+        对外接口：检查某动作是否相对于所有轨迹是安全的。
         """
         return self.simulate_action_safety(steering, throttle, all_trajectories)
 
     def simulate_movement(self, steering, throttle, steps=30):
         """
-        Simulates movement and returns final position (cx, cy) in pixels.
-        Returns None if wall collision occurs.
+        模拟移动并返回最终位置 (cx, cy)（像素坐标）。
+        若发生与墙体碰撞则返回 None。
         """
         sim_x = self.player.x
         sim_y = self.player.y
@@ -292,7 +288,7 @@ class DodgeStrategy:
             if steering != 0:
                 sim_theta += steering * C.BASE_TURN_W
                 
-            # Wall Check
+            # 墙体检测
             cx, cy = sim_x / C.MOTION_CALC_SCALE, sim_y / C.MOTION_CALC_SCALE
             cells_idx = cell.calculate_cell_num(cx, cy)
             p_rect = pygame.Rect(0, 0, C.PLAYER_PX, C.PLAYER_PY)
@@ -303,35 +299,35 @@ class DodgeStrategy:
                 c = self.arena.cells[cells_idx[i]]
                 for w in c.walls:
                     if p_rect.colliderect(w.rect):
-                        return None # Hit wall
+                        return None # 碰到墙体
                         
         return (sim_x / C.MOTION_CALC_SCALE, sim_y / C.MOTION_CALC_SCALE)
 
     def simulate_action_safety(self, steering, throttle, threats):
-        # Simulate player movement for a few frames
-        # Check if new position collides with ANY threat trajectory
+        # 对玩家动作进行若干帧的模拟
+        # 检查模拟位置是否与任一威胁轨迹相交
         
         # Current state
         sim_x = self.player.x
         sim_y = self.player.y
         sim_theta = self.player.theta
         
-        # Simulate 30 frames (approx 0.5s at 60fps, enough to move ~30px)
-        # Increased from 10 to 30 to allow escaping the collision radius
+        # 模拟 30 帧（约 0.5 秒，60fps），足以移动约 30 像素
+        # 将步数从 10 增至 30，以便更有机会脱离碰撞半径
         for _ in range(30):
             # Apply physics (Simplified)
             if throttle != 0:
                 v = C.BASE_MOVE_V if throttle > 0 else C.BACKWARD_V
-                # FIX: Do NOT multiply by MOTION_CALC_SCALE here. 
-                # BASE_MOVE_V is already in the correct units for adding to self.x
+                # 注意：此处不要再乘以 MOTION_CALC_SCALE。
+                # BASE_MOVE_V 的单位已可直接用于更新 self.x
                 sim_x += throttle * v * math.cos(sim_theta)
                 sim_y += throttle * v * math.sin(sim_theta)
             
             if steering != 0:
                 sim_theta += steering * C.BASE_TURN_W
                 
-            # Check wall collision (Feasibility)
-            # If hits wall, this action is invalid
+            # 检查墙体碰撞（可行性判定）
+            # 若撞墙，该动作无效
             cx, cy = sim_x / C.MOTION_CALC_SCALE, sim_y / C.MOTION_CALC_SCALE
             # Simple check: is center inside a wall?
             # (Full collision check is complex, assume center check is enough for feasibility)
@@ -344,9 +340,9 @@ class DodgeStrategy:
                 c = self.arena.cells[cells_idx[i]]
                 for w in c.walls:
                     if p_rect.colliderect(w.rect):
-                        return False # Hit wall, invalid action
+                        return False # 碰到墙体，动作无效
             
-            # Check threat collision (Safety)
+            # 检查与威胁的碰撞（安全性）
             sim_pos = (cx, cy)
             for _, _, trajectory in threats:
                 if self.check_trajectory_collision(trajectory, sim_pos):
@@ -356,7 +352,7 @@ class DodgeStrategy:
 
     def get_distance_to_trajectory(self, trajectory, pos):
         """
-        Returns the minimum distance from pos to any segment in the trajectory.
+        返回 pos 到轨迹中任意线段的最小距离。
         """
         min_dist_sq = float('inf')
         px, py = pos

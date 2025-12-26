@@ -10,9 +10,9 @@ class Dijkstra:
         
     def get_path(self, start_pos, end_pos):
         """
-        Calculate a path from start_pos to end_pos.
-        start_pos, end_pos: (x, y) tuples in world coordinates.
-        Returns: List of (x, y) tuples representing the path.
+        计算从 start_pos 到 end_pos 的路径。
+        start_pos, end_pos: 世界坐标下的 (x, y) 元组。
+        返回：表示路径的 (x, y) 元组列表。
         """
         start_cell = self._get_cell_idx(start_pos)
         end_cell = self._get_cell_idx(end_pos)
@@ -23,7 +23,7 @@ class Dijkstra:
         if start_cell == end_cell:
             return [end_pos]
             
-        # Priority Queue: (cost, current_cell_idx, path_list)
+        # 优先队列条目： (代价, 当前格子索引, 路径列表)
         pq = [(0, start_cell, [start_cell])]
         visited = set()
         min_dists = {start_cell: 0}
@@ -51,23 +51,20 @@ class Dijkstra:
         if not final_path_indices:
             return []
             
-        # Convert to world coordinates
+        # 转换为世界坐标（像素中心点）
         waypoints = []
         for idx in final_path_indices:
             cell = self.arena.cells[idx]
             waypoints.append(cell.rect.center)
             
-        # Post-processing:
-        # Replace the first waypoint with start_pos? 
-        # No, usually we want to steer towards the first waypoint (center of start cell) 
-        # or the second one if we are close to the first.
-        # Let's just return the full path of centers, but replace the last one with exact end_pos.
+        # 后处理：
+        # 是否用 start_pos 替代第一个路点？通常我们希望朝向第一个路点（起始格中心），
+        # 如果离第一个路点很近可以使用第二个路点。这里保持格子中心路径，同时将最后一个点替换为精确的 end_pos。
         
         waypoints[-1] = end_pos
         
-        # Simple smoothing: Remove the first waypoint if we are already "past" it or very close
-        # But this depends on the vehicle dynamics. 
-        # We'll leave the raw path (centers) and let the controller handle the "seek" logic.
+        # 简单平滑：若已经越过或非常接近第一个路点可移除它，但这取决于车辆动力学。
+        # 因此保留原始中心点路径，由控制器处理寻路/靠近细节。
         
         return waypoints
 

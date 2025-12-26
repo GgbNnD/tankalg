@@ -21,11 +21,11 @@ class SmartAI:
         self.last_attack_action = None
 
     def get_keys(self):
-        # Update logic
+        # 更新逻辑
         self._update()
         
-        # Return actions (fire)
-        # Movement is handled by setting self.player.throttle/steering directly
+        # 返回动作（射击）
+        # 移动通过直接设置 self.player.throttle/steering 来处理
         fire = False
         if self.last_attack_action and self.last_attack_action.get('fire'):
             fire = True
@@ -36,19 +36,19 @@ class SmartAI:
     def _update(self):
         current_time = pygame.time.get_ticks()
         
-        # 0. Global Prediction (The Oracle)
-        # Get ALL future bullet paths once per frame to inform all decisions
+        # 0. 全局预测（先知）
+        # 每帧获取所有未来子弹轨迹以为各决策提供信息
         all_trajectories = self.dodge_strategy.get_all_bullet_trajectories()
         
-        # 1. Dodge (Highest Priority - Survival)
+        # 1. 闪避（最高优先级 — 生存）
         dodge_action = self.dodge_strategy.get_dodge_action(all_trajectories=all_trajectories)
         if dodge_action:
             self.player.steering = dodge_action['steering']
             self.player.throttle = dodge_action['throttle']
-            self.last_attack_action = None # Cancel attack if dodging
+            self.last_attack_action = None # 闪避时取消攻击动作
             return
 
-        # 2. Find target
+        # 2. 寻找目标
         self.target_enemy = self._find_nearest_enemy()
         
         if not self.target_enemy:
@@ -57,13 +57,13 @@ class SmartAI:
             self.last_attack_action = None
             return
 
-        # 3. Try Attack Strategy (Kill)
+        # 3. 尝试攻击策略（击杀）
         attack_action = self.attack_strategy.get_attack_action(self.target_enemy)
         self.last_attack_action = attack_action
         
         if attack_action:
-            # SAFETY VALVE: Check if this attack move is safe
-            # Even if we want to kill, we must not commit suicide
+            # 安全阀：检查此攻击动作是否安全
+            # 即使想击杀也不能送死
             if self.dodge_strategy.is_action_safe(attack_action['steering'], attack_action['throttle'], all_trajectories):
                 # Execute Attack Action
                 self.player.steering = attack_action['steering']
@@ -71,15 +71,13 @@ class SmartAI:
                 # Fire is handled in get_keys
                 return
             else:
-                # Attack move is unsafe. Abort attack movement.
-                # We might still be able to fire if we stop? 
-                # For now, just fall through to see if Contact strategy finds a safe path, 
-                # or just stop.
-                self.last_attack_action = None # Don't fire if we can't safely take the shot position
+                # 攻击动作不安全，放弃攻击移动。
+                # 我们可能在停止后仍能开火，但目前让其回落到接触策略或停下。
+                self.last_attack_action = None # 如果无法安全获得射击位置则不射击
 
-        # 4. If no safe attack possible, Move towards enemy (Chase)
+        # 4. 如果没有安全的攻击选项，则向敌人移动（追逐）
         
-        # Update path periodically
+        # 定期更新路径
         if current_time - self.update_timer > self.path_update_interval:
             # Convert positions to screen coordinates (pixels) for Dijkstra
             start_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
@@ -89,16 +87,16 @@ class SmartAI:
             self.contact_strategy.set_path(self.path)
             self.update_timer = current_time
             
-        # Execute Contact Strategy
+        # 执行接触/寻路策略
         move_action = self.contact_strategy.execute()
         
-        # SAFETY VALVE: Check if this chase move is safe
+        # 安全阀：检查此追逐动作是否安全
         if self.dodge_strategy.is_action_safe(move_action['steering'], move_action['throttle'], all_trajectories):
             self.player.steering = move_action['steering']
             self.player.throttle = move_action['throttle']
         else:
-            # Chase move is unsafe! Stop immediately.
-            # Better to stand still than walk into a bullet.
+            # 追逐动作不安全，立即停止。
+            # 站着不动总比走进子弹要好。
             self.player.steering = 0
             self.player.throttle = 0
 
@@ -119,14 +117,14 @@ class SmartAI:
         
         desired_angle = math.atan2(dy, dx)
         
-        # Angle difference
+        # 角度差
         diff = desired_angle - self.player.theta
         
-        # Normalize to [-PI, PI]
+        # 归一化到 [-PI, PI]
         while diff > math.pi: diff -= 2 * math.pi
         while diff < -math.pi: diff += 2 * math.pi
         
-        # Steering
+        # 转向
         if abs(diff) > 0.1:
             if diff > 0:
                 self.player.steering = 1.0 
@@ -135,8 +133,8 @@ class SmartAI:
         else:
             self.player.steering = 0.0
             
-        # Throttle
-        # Slow down if turning sharply
+        # 油门
+        # 如果大角度转弯则减速
         if abs(diff) > 1.0:
             self.player.throttle = 0.0 # Turn in place
         else:
