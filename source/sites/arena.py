@@ -34,63 +34,12 @@ class Arena:
         self.map_surface = pygame.Surface((C.SCREEN_W, C.SCREEN_H)).convert()
         self.map_surface.fill(C.SCREEN_COLOR)
 
-        # 不使用递归迷宫生成器，创建固定网格（无内部墙），地图固定
-        for i in range(0, C.COLUMN_NUM*C.ROW_NUM):
-            col = i % C.COLUMN_NUM
-            row = int(i / C.COLUMN_NUM)
-            walls_sign = 0
-            if row == 0:
-                walls_sign |= C.TOP
-            if row == C.ROW_NUM-1:
-                walls_sign |= C.BOTTOM
-            if col == 0:
-                walls_sign |= C.LEFT
-            if col == C.COLUMN_NUM-1:
-                walls_sign |= C.RIGHT
-
-            self.cells.append(cell.Cell(
-                C.LEFT_SPACE + col * C.BLOCK_SIZE,
-                C.TOP_SPACE + row * C.BLOCK_SIZE,
-                walls_sign=walls_sign))
-            self.cells[i].draw_cell(self.map_surface)
-
-        # 添加固定墙：在 x=1/3 和 x=2/3 处，各一面竖直墙
-        # 第一面从上方向下覆盖高度的 2/3，第二面从下方向上覆盖高度的 2/3
-        self.add_fixed_walls()
+        generate_maze.predeal(self)
+        generate_maze.Generage_Maze(self, 0, 0, C.COLUMN_NUM-1, C.ROW_NUM-1)
 
         for i in range(0, C.COLUMN_NUM*C.ROW_NUM):
             self.cells[i].draw_walls(self.map_surface)
 
-    def add_fixed_walls(self):
-        """
-        在格子间添加两面固定竖直墙：分别位于归一化 x=1/3 和 x=2/3 处。
-        第一面（x=1/3）覆盖顶部 2/3 行；第二面（x=2/3）覆盖底部 2/3 行。
-        """
-        # 计算目标列（取整到格子索引）
-        col1 = int(C.COLUMN_NUM * (1.0/3.0))
-        col2 = int(C.COLUMN_NUM * (2.0/3.0))
-        col1 = max(0, min(C.COLUMN_NUM-1, col1))
-        col2 = max(0, min(C.COLUMN_NUM-1, col2))
-
-        rows_cover = int(round(C.ROW_NUM * (2.0/3.0)))
-
-        # 在列边界处添加 RIGHT（放在左侧单元格的右侧）或 LEFT（若在最左边）的墙
-        for row in range(0, rows_cover):
-            if col1 > 0:
-                idx = generate_maze.get_idx(col1-1, row)
-                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x + C.BLOCK_SIZE, self.cells[idx].rect.y, C.RIGHT))
-            else:
-                idx = generate_maze.get_idx(col1, row)
-                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x, self.cells[idx].rect.y, C.LEFT))
-
-        start_row = C.ROW_NUM - rows_cover
-        for row in range(start_row, C.ROW_NUM):
-            if col2 > 0:
-                idx = generate_maze.get_idx(col2-1, row)
-                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x + C.BLOCK_SIZE, self.cells[idx].rect.y, C.RIGHT))
-            else:
-                idx = generate_maze.get_idx(col2, row)
-                self.cells[idx].walls.add(cell.Wall(self.cells[idx].rect.x, self.cells[idx].rect.y, C.LEFT))
 
     def setup_supplies(self):
         self.supply_num = 0
