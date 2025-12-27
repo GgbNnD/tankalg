@@ -44,7 +44,7 @@ def im2col(x, kernel_size, stride, padding):
     kh, kw = kernel_size, kernel_size
     p = padding
     
-    # Pad (using edge/replicate padding)
+    # 填充 (使用边缘/复制填充)
     x_padded = np.pad(x, ((0,0), (0,0), (p,p), (p,p)), mode='edge')
     
     out_h = (H + 2*p - kh) // stride + 1
@@ -88,7 +88,7 @@ class Conv2d(Layer):
         self.stride = stride
         self.padding = padding
         
-        # He initialization
+        # He 初始化
         n_in = in_channels * kernel_size * kernel_size
         self.W = np.random.randn(out_channels, in_channels, kernel_size, kernel_size) * np.sqrt(2.0 / n_in)
         self.b = np.zeros(out_channels)
@@ -112,7 +112,7 @@ class Conv2d(Layer):
         return out
 
     def backward(self, grad_output):
-        # grad_output: (N, out_C, out_H, out_W)
+        # 梯度输出: (N, out_C, out_H, out_W)
         N, out_C, out_H, out_W = grad_output.shape
         
         grad_output_reshaped = grad_output.transpose(0, 2, 3, 1).reshape(-1, out_C)
@@ -142,7 +142,7 @@ class Flatten(Layer):
 
 class Adam:
     def __init__(self, params, lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
-        self.params = params # List of numpy arrays
+        self.params = params # numpy 数组列表
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2

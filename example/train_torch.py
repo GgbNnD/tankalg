@@ -12,12 +12,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import argparse
 
-# Add current directory to path to ensure imports work
+# 将当前目录添加到路径以确保导入正常工作
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from maze_generator import MazeGenerator
 
-# Setup Logging
+# 设置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -30,10 +30,10 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.info(f"Running on device: {device}")
 
-# --- Headless Maze Generator ---
+# --- 无头迷宫生成器 ---
 class HeadlessMazeGenerator(MazeGenerator):
     def __init__(self, width, height):
-        # Initialize only logic-related attributes, skip visualization
+        # 仅初始化逻辑相关属性，跳过可视化
         self.width = width
         self.height = height
         self.visited = [[False for _ in range(width)] for _ in range(height)]
@@ -41,23 +41,23 @@ class HeadlessMazeGenerator(MazeGenerator):
         for y in range(height):
             for x in range(width):
                 self.grid_graph[(x, y)] = []
-        # No plt figures
+        # 无 plt 图形
         self.lines = []
 
     def remove_wall_visual(self, x, y, direction):
-        pass # Do nothing
+        pass # 什么也不做
 
     def update_head(self, x, y):
-        pass # Do nothing
+        pass # 什么也不做
 
     def generate(self, algo='dfs', block=False):
-        # Override to avoid UI calls
+        # 重写以避免 UI 调用
         if algo == 'dfs':
             self._dfs(0, 0)
         elif algo == 'prim':
             self._prim(0, 0)
 
-# --- DQN Model ---
+# --- DQN 模型 ---
 class DQN(nn.Module):
     def __init__(self, input_channels, height, width, output_dim):
         super(DQN, self).__init__()
@@ -87,7 +87,7 @@ class DQN(nn.Module):
         x = x.view(x.size(0), -1)
         return self.fc(x)
 
-# --- Replay Buffer ---
+# --- 经验回放缓冲区 ---
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
@@ -102,7 +102,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# --- Environment Wrapper ---
+# --- 环境包装器 ---
 class MazeEnv:
     def __init__(self, width=10, height=10):
         self.width = width
@@ -115,15 +115,15 @@ class MazeEnv:
 
     def reset(self):
         self.maze = HeadlessMazeGenerator(self.width, self.height)
-        # Randomize algorithm to make AI robust to different maze structures
+        # 随机化算法以使 AI 对不同的迷宫结构具有鲁棒性
         algo = random.choice(['dfs', 'prim'])
         self.maze.generate(algo=algo)
         
-        # Randomize Start and Goal Positions
+        # 随机化起点和终点位置
         while True:
             ax, ay = random.randint(0, self.width-1), random.randint(0, self.height-1)
             gx, gy = random.randint(0, self.width-1), random.randint(0, self.height-1)
-            # Ensure minimum distance to avoid trivial episodes and pollution
+            # 确保最小距离以避免过于简单的回合和数据污染
             if abs(ax - gx) + abs(ay - gy) > min(self.width, self.height) / 2:
                 self.agent_pos = (ax, ay)
                 self.goal_pos = (gx, gy)
@@ -135,36 +135,36 @@ class MazeEnv:
         return self.get_state()
 
     def get_state(self):
-        # State: (7, H, W)
-        # 0: Wall Up
-        # 1: Wall Down
-        # 2: Wall Left
-        # 3: Wall Right
-        # 4: Agent Pos
-        # 5: Goal Pos
-        # 6: Visited Map
+        # 状态: (7, H, W)
+        # 0: 上方墙壁
+        # 1: 下方墙壁
+        # 2: 左方墙壁
+        # 3: 右方墙壁
+        # 4: 智能体位置
+        # 5: 目标位置
+        # 6: 访问地图
         
         state = np.zeros((7, self.height, self.width), dtype=np.float32)
         
-        # Fill Wall Channels
+        # 填充墙壁通道
         for y in range(self.height):
             for x in range(self.width):
                 neighbors = self.maze.grid_graph.get((x, y), [])
-                # If (x, y-1) NOT in neighbors, then Wall Up is 1
+                # 如果 (x, y-1) 不在邻居中，则上方墙壁为 1
                 if (x, y - 1) not in neighbors: state[0, y, x] = 1.0
                 if (x, y + 1) not in neighbors: state[1, y, x] = 1.0
                 if (x - 1, y) not in neighbors: state[2, y, x] = 1.0
                 if (x + 1, y) not in neighbors: state[3, y, x] = 1.0
         
-        # Agent Pos
+        # 智能体位置
         ax, ay = self.agent_pos
         state[4, ay, ax] = 1.0
         
-        # Goal Pos
+        # 目标位置
         gx, gy = self.goal_pos
         state[5, gy, gx] = 1.0
         
-        # Visited Map
+        # 访问地图
         state[6] = self.visited_map
         
         return state
@@ -172,7 +172,7 @@ class MazeEnv:
     def step(self, action):
         x, y = self.agent_pos
         
-        # 0: Up, 1: Down, 2: Left, 3: Right
+        # 0: 上, 1: 下, 2: 左, 3: 右
         dx, dy = 0, 0
         if action == 0: dy = -1
         elif action == 1: dy = 1
@@ -183,24 +183,24 @@ class MazeEnv:
         
         neighbors = self.maze.grid_graph.get((x, y), [])
         
-        reward = -0.1 # Increased Step penalty to encourage shorter paths
+        reward = -0.1 # 增加步数惩罚以鼓励更短的路径
         done = False
         
         if (nx, ny) in neighbors:
             self.agent_pos = (nx, ny)
             
-            # Revisit penalty
+            # 重复访问惩罚
             if self.visited_map[ny, nx] > 0:
-                reward = -0.5 # Penalty for revisiting
+                reward = -0.5 # 重复访问的惩罚
             else:
                 self.visited_map[ny, nx] = 1.0
-                reward = 0.2 # Net negative to encourage speed, but better than revisiting
+                reward = 0.2 # 净负值以鼓励速度，但比重复访问要好
             
             if self.agent_pos == self.goal_pos:
-                reward = 20.0 # Stronger goal reward
+                reward = 20.0 # 更强的目标奖励
                 done = True
         else:
-            reward = -1.0 # Stronger Hit wall penalty
+            reward = -1.0 # 更强的撞墙惩罚
             
         return self.get_state(), reward, done
 
@@ -227,19 +227,19 @@ def load_checkpoint(filename, model, optimizer):
         logging.info(f"No checkpoint found at '{filename}'")
         return 0, 1.0
 
-# --- Training Loop ---
+# --- 训练循环 ---
 def train(resume=False):
-    # Hyperparameters
+    # 超参数
     WIDTH, HEIGHT = 10, 10
     EPISODES = 10000 
-    BATCH_SIZE = 32 # Increased batch size for smoother gradients
-    GAMMA = 0.9 # Slightly increased to look a bit further ahead
+    BATCH_SIZE = 32 # 增加批量大小以获得更平滑的梯度
+    GAMMA = 0.9 # 略微增加以看得更远
     EPSILON_START = 1.0
-    EPSILON_END = 0.05 # Allow more exploitation at the end
-    EPSILON_DECAY_EPISODES = 4000 # Linear decay duration
+    EPSILON_END = 0.05 # 允许在最后进行更多利用
+    EPSILON_DECAY_EPISODES = 4000 # 线性衰减持续时间
     LR = 0.0001 
-    TARGET_UPDATE = 200 # Less frequent target updates for stability
-    MEMORY_SIZE = 50000 # Larger memory to reduce correlation
+    TARGET_UPDATE = 200 # 降低目标更新频率以提高稳定性
+    MEMORY_SIZE = 50000 # 更大的内存以减少相关性
 
     env = MazeEnv(WIDTH, HEIGHT)
     
@@ -271,8 +271,8 @@ def train(resume=False):
         done = False
         steps = 0
         
-        while not done and steps < 300: # Increased max steps
-            # Epsilon-greedy action selection
+        while not done and steps < 300: # 增加最大步数
+            # Epsilon-贪婪动作选择
             if random.random() < epsilon:
                 action = random.randint(0, 3)
             else:
@@ -288,7 +288,7 @@ def train(resume=False):
             total_reward += reward
             steps += 1
             
-            # Train
+            # 训练
             if len(replay_buffer) > BATCH_SIZE:
                 states, actions, rewards, next_states, dones = replay_buffer.sample(BATCH_SIZE)
                 
@@ -310,24 +310,24 @@ def train(resume=False):
                 
                 optimizer.zero_grad()
                 loss.backward()
-                # Gradient Clipping to prevent exploding gradients
+                # 梯度裁剪以防止梯度爆炸
                 torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
                 optimizer.step()
         
-        # Update epsilon (Linear Decay)
+        # 更新 epsilon (线性衰减)
         if epsilon > EPSILON_END:
             epsilon -= (EPSILON_START - EPSILON_END) / EPSILON_DECAY_EPISODES
             epsilon = max(EPSILON_END, epsilon)
         
         rewards_history.append(total_reward)
 
-        # Update target network
+        # 更新目标网络
         if episode % TARGET_UPDATE == 0:
             target_net.load_state_dict(policy_net.state_dict())
             
         if episode % 50 == 0:
             logging.info(f"Episode {episode}, Total Reward: {total_reward:.2f}, Epsilon: {epsilon:.2f}, Steps: {steps}")
-            # Save checkpoint
+            # 保存检查点
             save_checkpoint({
                 'episode': episode,
                 'state_dict': policy_net.state_dict(),
@@ -335,11 +335,11 @@ def train(resume=False):
                 'epsilon': epsilon
             }, filename="checkpoint.pth")
 
-    # Save model
+    # 保存模型
     torch.save(policy_net.state_dict(), "maze_dqn_model.pth")
     logging.info("Training complete. Model saved to maze_dqn_model.pth")
 
-    # Plot rewards
+    # 绘制奖励
     plt.figure(figsize=(10, 5))
     plt.plot(rewards_history)
     plt.title('Training Rewards over Episodes')
