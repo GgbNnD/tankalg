@@ -51,20 +51,16 @@ class Dijkstra:
         if not final_path_indices:
             return []
             
-        # 转换为世界坐标（像素中心点）
+        # 转换为世界坐标
         waypoints = []
         for idx in final_path_indices:
             cell = self.arena.cells[idx]
             waypoints.append(cell.rect.center)
-            
-        # 后处理：
-        # 是否用 start_pos 替代第一个路点？通常我们希望朝向第一个路点（起始格中心），
-        # 如果离第一个路点很近可以使用第二个路点。这里保持格子中心路径，同时将最后一个点替换为精确的 end_pos。
         
         waypoints[-1] = end_pos
         
-        # 简单平滑：若已经越过或非常接近第一个路点可移除它，但这取决于车辆动力学。
-        # 因此保留原始中心点路径，由控制器处理寻路/靠近细节。
+        # 简单平滑路径，若已经越过或非常接近第一个路点可移除它
+        # 保留原始中心点路径，由控制器处理寻路/靠近细节。
         
         return waypoints
 
@@ -82,7 +78,7 @@ class Dijkstra:
         c = cell_idx % self.cols
         current_cell = self.arena.cells[cell_idx]
         
-        # Directions: (dr, dc, direction_name, wall_type, opp_wall_type)
+        # 方向：(dr, dc, 方向名称, 墙类型, 对应墙类型)
         directions = [
             (-1, 0, 'UP', C.TOP, C.BOTTOM),
             (1, 0, 'DOWN', C.BOTTOM, C.TOP),
@@ -96,15 +92,15 @@ class Dijkstra:
                 neighbor_idx = nr * self.cols + nc
                 neighbor_cell = self.arena.cells[neighbor_idx]
                 
-                # Check walls
+                # 检查墙壁阻挡
                 blocked = False
-                # Check current cell's wall
+                # 检查当前格子的墙壁
                 for w in current_cell.walls:
                     if w.type == wall_type:
                         blocked = True
                         break
                 if not blocked:
-                    # Check neighbor cell's wall
+                    # 检查邻居格子的墙壁
                     for w in neighbor_cell.walls:
                         if w.type == opp_wall_type:
                             blocked = True

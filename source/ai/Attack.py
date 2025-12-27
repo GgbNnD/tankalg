@@ -7,8 +7,7 @@ class AttackStrategy:
     def __init__(self, player):
         self.player = player
         self.arena = player.arena
-        # 攻击范围（以像素为单位，屏幕坐标）
-        # 缩小范围以在远处鼓励移动/路径寻路
+        # 攻击范围
         self.max_range = 500 
         self.ricochet_range = 300
         
@@ -26,17 +25,16 @@ class AttackStrategy:
         if dist > self.max_range:
             return None
             
-        # 2. 子弹管理（节约弹药）
-        # 考虑墙体遮挡：若无直接视线，则相当于“距离较远”或处于复杂环境，盲射浪费且危险。
+        # 2. 子弹管理
+        # 考虑墙体遮挡
         has_los = self.check_path_clear(p_pos, e_pos)
         active_bullets = len(self.player.rounds)
         
-        # Limit ammo if:
-        # 1. Distance is greater than ricochet range
-        # 2. OR there is no direct line of sight (wall in between)
+        # 限制弹药
+        # 距离大于反弹射程，或者没有直接视线时停止攻击 
         if dist > self.ricochet_range or not has_los:
             if active_bullets >= 5:
-                return None # Stop attacking, move closer (Chase)
+                return None 
             
         # 3. 尝试瞄准
         aim_angle = self.try_aiming(p_pos, e_pos, dist)
@@ -46,7 +44,6 @@ class AttackStrategy:
             current_theta = self.player.theta
             diff = aim_angle - current_theta
             
-            # 将差值归一化到 [-PI, PI]
             while diff > math.pi: diff -= 2*math.pi
             while diff < -math.pi: diff += 2*math.pi
             
@@ -57,13 +54,12 @@ class AttackStrategy:
                 'throttle': 0
             }
             
-            # 3. 执行：旋转并射击
-            # 若角度对准在约 4 度（0.07 弧度）内则开火
+            # 3. 执行旋转并射击
+            # 若角度对准在约 4 度内则开火
             if abs(diff) < 0.07:
                 action['fire'] = True
                 action['steering'] = 0
             else:
-                # Rotate towards target
                 # 向目标方向旋转
                 action['steering'] = 1.0 if diff > 0 else -1.0
                 
@@ -72,7 +68,7 @@ class AttackStrategy:
         return None
 
     def try_aiming(self, p_pos, e_pos, dist):
-        # A. 直接射击
+        # 直接射击
         dx = e_pos[0] - p_pos[0]
         dy = e_pos[1] - p_pos[1]
         direct_angle = math.atan2(dy, dx)
@@ -80,18 +76,16 @@ class AttackStrategy:
         if self.check_path_clear(p_pos, e_pos):
             return direct_angle
             
-        # B. 反弹射击
-        # 仅在有效反弹范围内尝试
+        # 反弹射击，仅在有效反弹范围内尝试
         if dist > self.ricochet_range:
             return None
 
-        # Scan 360 degrees in steps
         # 按步长扫描 360 度
         # 跳过正交方向以避免无限反弹或子弹陷入死循环
         for i in range(0, 36):
             angle = i * 10 * math.pi / 180
             
-            # Check if angle is close to cardinal directions (0, 90, 180, 270)
+            # 检查角度是否接近基本方向（0、90、180、270）
             deg = (angle * 180 / math.pi) % 360
             if any(abs(deg - x) < 5 for x in [0, 90, 180, 270]):
                 continue
@@ -102,7 +96,7 @@ class AttackStrategy:
         return None
 
     def check_path_clear(self, start, end):
-        # 检查线段是否与任何墙相交（用于视线检测）
+        # 检查线段是否与任何墙相交
         for c in self.arena.cells:
             for w in c.walls:
                 if w.rect.clipline(start, end):
@@ -111,16 +105,13 @@ class AttackStrategy:
 
     def simulate_shot(self, start_pos, angle, target_pos):
         # 射线检测并考虑反弹
-        # 为效率设置最大反弹数为 1（可根据需要增加）
         max_bounces = 1
         current_pos = start_pos
         current_angle = angle
         
-        # Target radius (approximate)
         target_radius = C.PLAYER_PX / 2
         
         for _ in range(max_bounces + 1):
-            # 创建一条长射线
             ray_len = 1000
             end_x = current_pos[0] + ray_len * math.cos(current_angle)
             end_y = current_pos[1] + ray_len * math.sin(current_angle)
@@ -134,12 +125,12 @@ class AttackStrategy:
                 for w in c.walls:
                     clipped = w.rect.clipline(current_pos, (end_x, end_y))
                     if clipped:
-                        # clipline 返回位于矩形内部的两点 ((x1, y1), (x2, y2))
+                        # 返回位于矩形内部的两点 ((x1, y1), (x2, y2))
                         p1, p2 = clipped
                         d1 = math.hypot(p1[0]-current_pos[0], p1[1]-current_pos[1])
                         d2 = math.hypot(p2[0]-current_pos[0], p2[1]-current_pos[1])
                         
-                        # 忽略与起点非常接近的相交（反弹后自相交）
+                        # 忽略与起点非常接近的相交
                         dist = 0
                         pt = None
                         if d1 > 1:
@@ -176,7 +167,7 @@ class AttackStrategy:
                 elif abs(hy - wy) < eps: normal_y = -1     # Top face
                 elif abs(hy - (wy+wh)) < eps: normal_y = 1 # Bottom face
                 else:
-                    # 回退策略：若击中角点或数值精度问题，则反转速度向量
+                    # 回退，若击中角点或数值精度问题，则反转速度向量
                     normal_x, normal_y = -math.cos(current_angle), -math.sin(current_angle)
 
                 # 反射向量公式：R = V - 2(V·N)N

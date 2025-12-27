@@ -40,7 +40,7 @@ class SmartAI:
         # 每帧获取所有未来子弹轨迹以为各决策提供信息
         all_trajectories = self.dodge_strategy.get_all_bullet_trajectories()
         
-        # 1. 闪避（最高优先级 — 生存）
+        # 1. 闪避（最高优先级是生存）
         dodge_action = self.dodge_strategy.get_dodge_action(all_trajectories=all_trajectories)
         if dodge_action:
             self.player.steering = dodge_action['steering']
@@ -57,29 +57,28 @@ class SmartAI:
             self.last_attack_action = None
             return
 
-        # 3. 尝试攻击策略（击杀）
+        # 3. 尝试攻击策略
         attack_action = self.attack_strategy.get_attack_action(self.target_enemy)
         self.last_attack_action = attack_action
         
         if attack_action:
-            # 安全阀：检查此攻击动作是否安全
-            # 即使想击杀也不能送死
+            # 检查此攻击动作是否安全，即使想击杀也不能送死
             if self.dodge_strategy.is_action_safe(attack_action['steering'], attack_action['throttle'], all_trajectories):
-                # Execute Attack Action
+                # 安全，执行攻击动作
                 self.player.steering = attack_action['steering']
                 self.player.throttle = attack_action['throttle']
-                # Fire is handled in get_keys
+                # 开火在 get_keys 中处理
                 return
             else:
                 # 攻击动作不安全，放弃攻击移动。
                 # 我们可能在停止后仍能开火，但目前让其回落到接触策略或停下。
                 self.last_attack_action = None # 如果无法安全获得射击位置则不射击
 
-        # 4. 如果没有安全的攻击选项，则向敌人移动（追逐）
+        # 4. 如果没有安全的攻击选项，则向敌人移动
         
         # 定期更新路径
         if current_time - self.update_timer > self.path_update_interval:
-            # Convert positions to screen coordinates (pixels) for Dijkstra
+            # 计算新路径
             start_pos = (self.player.x / C.MOTION_CALC_SCALE, self.player.y / C.MOTION_CALC_SCALE)
             end_pos = (self.target_enemy.x / C.MOTION_CALC_SCALE, self.target_enemy.y / C.MOTION_CALC_SCALE)
             
@@ -87,7 +86,7 @@ class SmartAI:
             self.contact_strategy.set_path(self.path)
             self.update_timer = current_time
             
-        # 执行接触/寻路策略
+        # 执行寻路策略
         move_action = self.contact_strategy.execute()
         
         # 安全阀：检查此追逐动作是否安全
@@ -95,8 +94,7 @@ class SmartAI:
             self.player.steering = move_action['steering']
             self.player.throttle = move_action['throttle']
         else:
-            # 追逐动作不安全，立即停止。
-            # 站着不动总比走进子弹要好。
+            # 追逐动作不安全，立即停止
             self.player.steering = 0
             self.player.throttle = 0
 
